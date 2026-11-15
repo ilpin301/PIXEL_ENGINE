@@ -6,8 +6,8 @@
  * there is no free PGE_BTN_* bit.  PGE_INPUT_QUIT is never set.
  * Touch (S4.3): STMPE811 via the BSP (BSP_TS_*, I2C3), reported in landscape display coordinates.  If the controller
  * is not found, touch stays disabled (touch_down = 0) and input init still succeeds.
- * Axis sign (to verify on the board): axis = ADC reading minus the centre taken at init, scaled to int16, so
- * axis[0] > 0 = RIGHT and axis[1] > 0 = DOWN if the voltage rises that way; flip the sign here if not. */
+ * Axis sign: axis = ADC reading minus the centre taken at init, scaled to int16; axis[0] > 0 = RIGHT, axis[1] > 0 = DOWN.
+ * X sign inverted 2026-11-15 after the S4.4 platformer play check (stick right was reported as left); Y unchanged. */
 #include "pge/hal/input.h"
 #include "stm32f4xx_hal.h"
 #include "stm32f429i_discovery_ts.h"
@@ -114,7 +114,7 @@ int pge_hal_input_poll(pge_raw_input* out) {
     if ((HAL_GPIO_ReadPin(kButtons[i].port, kButtons[i].pin) == GPIO_PIN_SET) == kButtons[i].active_high)
       b |= kButtons[i].bit;
 
-  int16_t ax = scale(adc_read(ADC_CHANNEL_13), s_centre[0]);
+  int16_t ax = (int16_t)-scale(adc_read(ADC_CHANNEL_13), s_centre[0]);   /* X is wired inverted */
   int16_t ay = scale(adc_read(ADC_CHANNEL_5), s_centre[1]);
   if (ax > AXIS_DEAD) b |= PGE_BTN_RIGHT;
   if (ax < -AXIS_DEAD) b |= PGE_BTN_LEFT;

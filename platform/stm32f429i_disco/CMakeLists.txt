@@ -74,3 +74,15 @@ add_executable(pge_f429_scroller ${CMAKE_SOURCE_DIR}/examples/f429/scroller_main
 target_include_directories(pge_f429_scroller PRIVATE ${CMAKE_SOURCE_DIR}/examples/scroller)
 target_link_libraries(pge_f429_scroller PRIVATE pge_core pge_f429_hal)
 pge_f429_firmware(pge_f429_scroller flash_f429_scroller)
+
+# One main source, two compile-time switches: bench (scripted bot + log summary) and the vsync back buffer.
+function(pge_f429_platformer tgt flash_tgt bench backbuf)
+  add_executable(${tgt} ${CMAKE_SOURCE_DIR}/examples/f429/platformer_main.cpp)
+  target_include_directories(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/examples/platformer)
+  target_compile_definitions(${tgt} PRIVATE PGE_PLATFORMER_BENCH=${bench} PGE_PLAT_BACKBUF=${backbuf})
+  target_link_libraries(${tgt} PRIVATE pge_core pge_f429_hal)
+  pge_f429_firmware(${tgt} ${flash_tgt})
+endfunction()
+pge_f429_platformer(pge_f429_platformer flash_f429_platformer 0 1)
+pge_f429_platformer(pge_f429_platbench flash_f429_platbench 1 1)
+pge_f429_platformer(pge_f429_platbench_nobb flash_f429_platbench_nobb 1 0)

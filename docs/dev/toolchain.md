@@ -86,3 +86,8 @@ openocd -f interface/stlink.cfg -c "transport select hla_swd" -f target/stm32f4x
 - Host scroller: `build/examples/scroller/pge_scroller.exe [--ticks N] [--shot out.bmp]` (arrows/WASD scroll, Z faster, left mouse button recentres the camera; `--ticks` quits after N ticks, `--shot` saves the window to a BMP).
 - F429 input test (buttons, stick, touch crosshair): `cmake --build build-f429 --target flash_f429_input` (board needed).
 - F429 scroller (`pge_f429_scroller`, same game as the host): `cmake --build build-f429 --target flash_f429_scroller` (board needed).
+
+## S4.4 platformer
+- Host: `build/examples/platformer/pge_platformer.exe [--auto] [--ticks N] [--shot f.bmp]` (`--auto` = scripted bot, `--ticks` quits after N ticks, `--shot` saves a BMP).
+- F429 firmware (one source, `examples/f429/platformer_main.cpp`, three targets in `build-f429/platform/stm32f429i_disco/`; all need the board): `pge_f429_platformer` (playable, vsync back buffer) with `flash_f429_platformer`; `pge_f429_platbench` (autoplay bench, back buffer) with `flash_f429_platbench`; `pge_f429_platbench_nobb` (autoplay bench, no vsync) with `flash_f429_platbench_nobb`.
+- The bench is autoplay: 60 warm-up ticks + 1800 samples (about 31 s). After flashing wait about 50 s, then read `pge_dbg_log` as in the F429 section above (look up addresses with `arm-none-eabi-nm` on the matching elf); the log ends with `# PLAT DONE`, LED4 on. Results: `docs/benchmarks/stage4.md`.

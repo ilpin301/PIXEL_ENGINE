@@ -1,0 +1,12 @@
+# Run A, MEASURED 2026-11-15, STM32F429I-DISCO @ 180 MHz, LTDC RGB565 landscape 320x240 logical + CPU transpose, firmware pge_f429_platbench (PGE_PLAT_BACKBUF=1, vsync back buffer), arm-none-eabi-g++ 10.3.1 Release (effective -O3, see stage4.md section 1), band 32 lines, 60 Hz tick
+# PLAT BENCH backbuf=1 samples=1800
+avg_us tick=13 band=12494 flush=16172 frame=28666
+max_us tick=19 band=12642 frame=29547
+ticks_dropped=0 tick_overruns=0 draw_dropped=0
+# PLAT DONE
+# Run B, MEASURED 2026-11-15, STM32F429I-DISCO @ 180 MHz, LTDC RGB565 landscape 320x240 logical + CPU transpose, firmware pge_f429_platbench_nobb (PGE_PLAT_BACKBUF=0, no vsync, writes the displayed buffer), arm-none-eabi-g++ 10.3.1 Release (effective -O3, see stage4.md section 1), band 32 lines, 60 Hz tick
+# PLAT BENCH backbuf=0 samples=1800
+avg_us tick=13 band=12504 flush=4915 frame=17419
+max_us tick=19 band=12653 frame=17579
+ticks_dropped=0 tick_overruns=0 draw_dropped=0
+# PLAT DONE

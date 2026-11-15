@@ -22,7 +22,7 @@
 | S4.2a | plan/PLAN-S4-mve.md | done 2026-11-15 |
 | S4.2b | plan/PLAN-S4-mve.md | done 2026-11-15 |
 | S4.3 | plan/PLAN-S4-mve.md | done 2026-11-15 (board check passed: user confirmed buttons, stick, touch in pge_f429_input and the scroller on the F429 board) |
-| S4.4 | plan/PLAN-S4-mve.md | todo |
+| S4.4 | plan/PLAN-S4-mve.md | done 2026-11-15 (G4 passed: user played the platformer on the F429 board; stick X inverted in the HAL; benchmark in docs/benchmarks/stage4.md) |
 | S4.5 | plan/PLAN-S4-mve.md | todo |
 | S5.1a | plan/PLAN-S5-advanced.md | todo |
 | S5.1b | plan/PLAN-S5-advanced.md | todo |
@@ -40,7 +40,7 @@
 
 ## Resume point
 
-Next: S4.4 (plan/PLAN-S4-mve.md, board needed). Read set: PLAN.md protocol + Key decisions, plan/PLAN-S4-mve.md, STATUS.md, core/include/pge/{gfx,camera,engine}.h, examples/scroller/game.h. Start in a fresh session: "Run session S4.4 from PLAN.md".
+Next: S4.5 (plan/PLAN-S4-mve.md, board needed; ESP-IDF not installed, see docs/dev/toolchain.md). Read set: PLAN.md protocol + Key decisions, plan/PLAN-S4-mve.md, STATUS.md, docs/benchmarks/stage4.md summary block, examples/platformer/game.h, hal/include/pge/hal/*.h. Start in a fresh session: "Run session S4.5 from PLAN.md".
 
 ## Decision log (append-only)
 
@@ -68,11 +68,16 @@ Next: S4.4 (plan/PLAN-S4-mve.md, board needed). Read set: PLAN.md protocol + Key
 - 2026-11-15 S4.2b: no Key decision K1-K15 changed. Built: SpriteFlags gained Rot90/Rot180/Rot270 (bits 2-3, spec values) plus operator| (enum stays unscoped, the 02 spec shows enum class: deviation); rule = flips apply to the stored image first, then clockwise rotation, Rot90/Rot270 swap the drawn width and height, (x, y) is the top-left of the drawn rectangle; SpriteSheet gained trailing field cols (0 = frames stacked as before, >0 = atlas with cols frames per row, row stride cols*w); Canvas::blit now takes a stride and uses one affine index walk (base + du/dv steps) for all flip/rotation combinations, tilemap passes stride = tile_w; new header core/include/pge/sprite.h with Animation{first,count,ticks_per_frame,loop} and inline animFrame(anim, ticks), a pure function of the tick count so every band draws the same frame (not looping holds the last frame; count 0 gives first; ticks_per_frame 0 counts as 1); examples/gfxdemo shows an animated (4-frame atlas), flipped, rotating and right-edge-clipped sprite; tests/test_sprites.cpp = 10 ASCII goldens (flips, all rotations, flip+rotate order, opaque, clipped left/top and right/bottom), an independent reference model (explicit flipX/flipY/rotate-CW image transforms) compared with renderFrame output for 2 transparency modes x 16 flag combos x 9 x 9 positions (partly and fully off screen) x bands 18/7/3/1 (band boundaries cut the 7x5 sprite), atlas frame test, animation helper test. Results: ctest 6/6 passed (version, gfx, bench, core, prims, sprites); mutation checks (flip applied after rotation; rot90 source mapping sy = u) make test_sprites fail; gfxdemo band 16 vs band 240 BMPs byte-identical (cmp) at scale 1 and 2; frame checked by eye (arrow, flipped arrow, 180-degree rotated arrow, clipped sprite at the right edge). Not verified: arm-none-eabi build of the new blit (not run), F429 on-board sprite speed (not measured), Rot sprites are per-pixel affine walk (no per-row fast path; measure in S4.4 if sprites dominate), tile ids still unchecked (no tile count). Session touched 3 new files + 5 edited files, about 330 new lines incl. tests, within the protocol rule 5 cap.
 - 2026-11-15 S4.3: no Key decision K1-K15 changed. Built Camera/clampAxis (world <= view centres the world, floor), parallaxOffset = floor(cam*q8/256) via int64 arithmetic shift, MapLayer + drawLayers (index 0 = back, caller keeps count <= PGE_PARALLAX_LAYERS), Tileset.transparent (index 0 skipped) so upper tile layers work. Input gained axis(i), touching/touchPressed/touchReleased/touchX/touchY (logical coords = raw display coords / PGE_SCALE); Input::update(raw, scale) is public for tests. Mapping tables per platform: host key table in input_sdl.cpp (+ left mouse = touch via pge_host_window_to_display), F429 button table in input_gpio.c + touch via BSP_TS (STMPE811) with landscape transform for PGE_F429_ROT 0/1 [to verify on board]. Deviations: Camera is ints (not Fix); no tile-id range check yet; TS init failure leaves touch disabled but input OK. Results: ctest 8/8 (version gfx bench core prims sprites camera input); mutation checks (clampAxis off-by-one, parallaxOffset truncating division, pressed() using cur only) make tests fail; scroller headless shot viewed (sky, clouds, bricks, ground, HUD); ARM build of all four firmware targets OK incl. sizes. Not verified: everything on the board (touch orientation, REVD calibration, scroller speed), interactive host keyboard/mouse (no input injected in the headless run), scale>1 path of Input touch only unit-tested.
 - 2026-11-15 S4.3 board check: user confirmed on the STM32F429I-DISCO that buttons, stick, touch (pge_f429_input) and the scroller (stick/buttons scroll, touch recentres) all work; touch orientation under PGE_F429_ROT=0 is correct, so the landscape transform is verified for ROT 0 only (ROT 1 untested). Protocol rule 5 cap exceeded this session (about 1,500 new lines incl. tests, 21 files touched, parts A/B/C by three subagents); not split because camera, input and the platform backends form one unit.
+- 2026-11-15 S4.4: no Key decision K1-K15 changed. Built core/include/pge/collision.h + core/src/physics/collision.cpp (TileProps flags solid 0x01 / one-way 0x02 / hazard 0x04, TileGrid, Body, MoveResult, moveAndCollide), examples/platformer (game.h, main.cpp), examples/f429/platformer_main.cpp with three F429 firmware targets (pge_f429_platformer, pge_f429_platbench, pge_f429_platbench_nobb), tests/test_collision.cpp, tests/test_platformer.cpp, report docs/benchmarks/stage4.md, raw docs/benchmarks/raw/f429-platformer.txt. Decisions: X axis then Y axis with sub-steps of at most one tile; one-way blocks only when moving down from above; hazard reported, never blocks; outside the grid is solid; ints and TileGrid instead of Fix and World (deviation from 03 section 3.1, World overload with S5.1a); gravity, jump, coyote and jump buffer are game code in the example; game.h is platform-free so S4.5 reuses it. Results: ctest 10/10 (version gfx bench core prims sprites camera input collision platformer), 20,000 random collision cases match a 1-pixel-step oracle, 3 mutation checks fail the test, 4000 autoplay ticks 0 deaths; F429 measured 2026-11-15 (180 MHz, Release, landscape 320x240 + CPU transpose, band 32, 1800 samples): run A vsync back buffer tick 13 / band 12,494 / flush 16,172 / frame 28,666 us, run B no vsync tick 13 / band 12,504 / flush 4,915 / frame 17,419 us, no drops or overruns; calculated 57 frames/s without vsync, 35 with vsync, F429 30 fps target met in both; firmware text 43,468 / data 40,616 / bss 79,232 B. Effective compile level is -O3 (build.ninja has -O2 -g -O3), stage3.md says -O2: not verified for S3. Not verified: K15 scale cost, portrait + DMA2D, HUD fps on screen, tiles-vs-sprite split, ESP32-S3, G4 play and tearing check on the board (pending user). Deviation: about 13 files touched (cap 8, protocol rule 5); not split because collision module, example, tests and F429 targets form one unit; run as core and example subagent tasks.
+- 2026-11-15 S4.4 stick fix: during the user's G4 play check the KY-023 stick X axis was reported inverted (right pushed the player left). Fix in platform/stm32f429i_disco/input_gpio.c: the X axis is negated before the RIGHT/LEFT thresholds and out->axis[0] (Y unchanged); this also affects pge_f429_scroller and pge_f429_input (same HAL), whose earlier S4.3 'stick works' check did not verify direction. pge_f429_platformer was rebuilt and reflashed; direction re-check by the user pending. Host tests unaffected (ctest 10/10 before the change; HAL file is ARM only).
+- 2026-11-15 G4 passed (user: "G4 passed"): platformer played on the STM32F429I-DISCO board; K1-K15 unchanged; tearing by eye was part of the check but the user gave no separate detail.
 
 ## Open questions
 
 - Q2: answered 2026-11-15 (see Decision log).
-- K15 scale cost (expand CPU, SDRAM staging) on the F429 not measured; add to the S4.4 benchmark (docs/benchmarks/stage4.md) if scale is used there.
+- K15 scale cost (expand CPU, SDRAM staging) on the F429 still not measured (S4.4 platformer uses scale 1); decide in S4.5 / S5.6 or by a small bench.
+- World overload of moveAndCollide (TileGrid today) arrives with S5.1a.
+- S4.4 G4: user play check and tearing check by eye on the board (pge_f429_platformer): answered 2026-11-15, passed.
 - DISCO audio pin: answered in 02 section 6 (confirm on board in S3).
 - ESP32-DOOMGAD final display interface (8080 parallel vs SPI): conflict between docs and breadboard.
 - TE pin routed on the user's SPI ILI9341 module? (check module, S3)
@@ -100,9 +105,9 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S3 Large scrolling worlds | planned | S5.1a |
 | S3 Procedurally generated terrain | planned | S5.1b |
 | S3 Multiple tile layers | implemented (host + F429, board-checked) | S4.3 (draw), S5.1a (store) |
-| S3 Character movement and animation | planned | S4.4 (example), S5.2 |
-| S3 Collision detection | planned | S4.4 (tile), S5.2 (entity) |
-| S3 Physics and gravity | planned | S4.4 (example controller), S5.2 |
+| S3 Character movement and animation | implemented in the example (S4.4); engine S5.2 | S4.4 (example), S5.2 |
+| S3 Collision detection | implemented (tile, host + F429 bench; entity S5.2) | S4.4 (tile), S5.2 (entity) |
+| S3 Physics and gravity | implemented in the example (S4.4); engine helper S5.2 | S4.4 (example controller), S5.2 |
 | S3 Inventory | planned (basic) | S6.2 |
 | S3 Items and crafting | planned | S6.2 (items = inventory stacks, crafting = example recipe table) |
 | S3 Interactive objects | planned | S5.1a (tile hook), S5.2 |
@@ -134,10 +139,10 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S5 Rendering strategy comparison | implemented (research) | S1.3, docs/research/03 |
 | S5 Band renderer, DMA flush, band-skip, windowed flush | band renderer + DMA2D flush implemented (prototype, measured S3.2b/S3.4); band-skip and windowed flush planned | S3.1a, S3.2, S4.5, S5.6 |
 | S6 Chunk-based world storage | planned | S5.1a |
-| S6 Tile properties and metadata | planned | S4.4 (flags) |
+| S6 Tile properties and metadata | flags implemented (TileProps, S4.4); hardness/light used from S5.x | S4.4 (flags) |
 | S6 Chunk loading and unloading, lazy loading, cache | planned | S5.1a |
 | S6 Procedural world generation | planned | S5.1b |
-| S6 Collision maps | planned | S4.4 |
+| S6 Collision maps | implemented (TileGrid, S4.4) | S4.4 |
 | S6 Interactive tiles | planned | S5.1a |
 | S6 World boundaries | implemented (host + F429, board-checked) | S4.3 (camera clamp), S5.1a |
 | S6 Camera-based rendering | implemented (host + F429, board-checked) | S4.3 |
