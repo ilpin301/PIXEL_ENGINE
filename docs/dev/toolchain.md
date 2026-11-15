@@ -65,13 +65,17 @@ cmake -S . -B build-f429 -G Ninja -DPGE_PLATFORM=stm32f429i_disco -DCMAKE_TOOLCH
 cmake --build build-f429                 # -> build-f429/platform/stm32f429i_disco/pge_f429_scene.{elf,bin,hex,map}
 cmake --build build-f429 --target flash_f429   # openocd + ST-LINK (needs the board)
 ```
-Clock 180 MHz (HSE 8 MHz, PLL 8/360/2, overdrive). Orientation: default `PGE_F429_ROT=0` (upright, confirmed on the board); `-DPGE_F429_ROT=1` selects the 180-degree-rotated variant. There is no UART: read the debug ring buffer `pge_dbg_log` (starts with the string `PGELOG1`, write offset in `pge_dbg_pos`) through OpenOCD memory reads; `pge_dbg_now_us` is updated every frame.
+Clock 180 MHz (HSE 8 MHz, PLL 8/360/2, overdrive). Orientation: default `PGE_F429_ROT=0` (upright, confirmed on the board); `-DPGE_F429_ROT=1` selects the 180-degree-rotated variant. There is no UART: read the debug ring buffer `pge_dbg_log` (32768 B, starts with the string `PGELOG1`, write offset in the uint32 `pge_dbg_pos`) through OpenOCD memory reads; `pge_dbg_now_us` is updated every frame.
 
-Read the log without a serial port:
+Firmware targets (all in `build-f429/platform/stm32f429i_disco/`): `pge_f429_scene` (+ `flash_f429`), `pge_f429_b1` (+ `flash_f429_b1`; B1 in 4 display variants plus micro benchmarks, ends with `# B1 DONE`, LED4 on; LED3 + `FAILED rc=` on error), `pge_f429_input` (+ `flash_f429_input`; input HAL test screen, buttons PA0/PC11/PC12/PD2/PD5, KY-023 stick on PC3/PA5).
+`-DPGE_F429_BACKBUF=1` makes `pge_f429_scene` use the vsync back buffer (FB1 at 0xD0040000); default 0. The B1 firmware picks its options per variant at run time.
+
+Read the log without a serial port (symbol addresses move with every build, so look them up first):
 ```bash
-openocd -f interface/stlink.cfg -c "transport select hla_swd" -f target/stm32f4x.cfg -c "init" -c "dump_image build-f429/dump/log.bin 0x20000000 2052" -c "shutdown"
+arm-none-eabi-nm build-f429/platform/stm32f429i_disco/pge_f429_b1.elf | grep -E "pge_dbg_(log|pos)$"   # e.g. 20000000 B pge_dbg_log
+openocd -f interface/stlink.cfg -c "transport select hla_swd" -f target/stm32f4x.cfg -c "init" -c "mdw <pge_dbg_pos addr>" -c "dump_image build-f429/dump/log.bin <pge_dbg_log addr> 32768" -c "shutdown"
 ```
-In Python the ring buffer is bytes [0:pos], with pos = little-endian uint32 at byte offset 2048 (symbols `pge_dbg_log` at 0x20000000, `pge_dbg_pos` at 0x20000800; confirm with `arm-none-eabi-nm` on the ELF).
+In Python the ring buffer is bytes [8:pos] of log.bin (pos from `mdw`; if the buffer has wrapped, the text is bytes [pos+1:] followed by [8:pos]).
 
 Restore the original board firmware (same interface/transport/target args):
 ```bash

@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 #define HAL_MODULE_ENABLED
+#define HAL_ADC_MODULE_ENABLED
 #define HAL_CORTEX_MODULE_ENABLED
 #define HAL_DMA_MODULE_ENABLED
 #define HAL_DMA2D_MODULE_ENABLED
@@ -34,6 +35,7 @@ extern "C" {
 #define INSTRUCTION_CACHE_ENABLE   1U
 #define DATA_CACHE_ENABLE          1U
 
+#define USE_HAL_ADC_REGISTER_CALLBACKS     0U
 #define USE_HAL_DMA2D_REGISTER_CALLBACKS   0U
 #define USE_HAL_I2C_REGISTER_CALLBACKS     0U
 #define USE_HAL_LTDC_REGISTER_CALLBACKS    0U
@@ -46,6 +48,7 @@ extern "C" {
 #include "stm32f4xx_hal_gpio.h"
 #include "stm32f4xx_hal_dma.h"
 #include "stm32f4xx_hal_cortex.h"
+#include "stm32f4xx_hal_adc.h"
 #include "stm32f4xx_hal_dma2d.h"
 #include "stm32f4xx_hal_flash.h"
 #include "stm32f4xx_hal_sdram.h"

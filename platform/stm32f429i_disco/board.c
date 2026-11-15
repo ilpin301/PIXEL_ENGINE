@@ -8,7 +8,7 @@
 #include "pge/hal/time.h"
 
 /* ---- debug log ---------------------------------------------------------------------------- */
-#define LOG_SIZE 2048u
+#define LOG_SIZE 32768u
 #define LOG_START 8u   /* keeps the "PGELOG1\n" magic; the ring wraps back to here */
 __attribute__((used)) char pge_dbg_log[LOG_SIZE] = "PGELOG1\n";
 __attribute__((used)) volatile uint32_t pge_dbg_pos = LOG_START;

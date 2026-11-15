@@ -7,14 +7,14 @@ if(NOT EXISTS ${HAL}/Src/stm32f4xx_hal.c)
   message(FATAL_ERROR "PGE_CUBE_DIR does not point at STM32CubeF4: ${PGE_CUBE_DIR}")
 endif()
 
-set(HAL_MODULES hal hal_cortex hal_dma hal_dma2d hal_flash hal_flash_ex hal_gpio hal_i2c hal_ltdc hal_ltdc_ex
+set(HAL_MODULES hal hal_adc hal_adc_ex hal_cortex hal_dma hal_dma2d hal_flash hal_flash_ex hal_gpio hal_i2c hal_ltdc hal_ltdc_ex
                 hal_pwr hal_pwr_ex hal_rcc hal_rcc_ex hal_sdram hal_spi ll_fmc)
 set(HAL_SOURCES)
 foreach(m ${HAL_MODULES})
   list(APPEND HAL_SOURCES ${HAL}/Src/stm32f4xx_${m}.c)
 endforeach()
 
-set(PGE_F429_OWN board.c display_ltdc.c)
+set(PGE_F429_OWN board.c display_ltdc.c input_gpio.c)
 add_library(pge_f429_hal STATIC
   ${HAL_SOURCES}
   ${BSP}/stm32f429i_discovery.c
@@ -26,31 +26,44 @@ add_library(pge_f429_hal STATIC
   ${PGE_F429_OWN})
 set_source_files_properties(${PGE_F429_OWN} PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")   # Cube stays unwarned
 set(PGE_F429_ROT 0 CACHE STRING "landscape rotation: 1 = panelX 239-y/panelY x, 0 = panelX y/panelY 319-x")
-target_compile_definitions(pge_f429_hal PUBLIC STM32F429xx USE_HAL_DRIVER PGE_F429_ROT=${PGE_F429_ROT})
+set(PGE_F429_BACKBUF 0 CACHE STRING "scene firmware: 1 = vsync back buffer (FB1) in pge_f429_scene")
+target_compile_definitions(pge_f429_hal PUBLIC STM32F429xx USE_HAL_DRIVER PGE_F429_ROT=${PGE_F429_ROT}
+                           PGE_F429_BACKBUF=${PGE_F429_BACKBUF})
 target_include_directories(pge_f429_hal PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}   # board.h, stm32f4xx_hal_conf.h
   ${PGE_CUBE_DIR}/Drivers/CMSIS/Include ${CMSIS_DEV}/Include ${HAL}/Inc ${BSP}
   ${PGE_CUBE_DIR}/Drivers/BSP/Components/Common ${PGE_CUBE_DIR}/Drivers/BSP/Components/ili9341
   ${PGE_CUBE_DIR}/Utilities/Fonts ${CMAKE_SOURCE_DIR}/hal/include)
 
+set(LD ${CMAKE_CURRENT_SOURCE_DIR}/STM32F429ZITX_FLASH.ld)
+# One firmware image: elf + map + bin + hex + size, plus a flash_<name> target (openocd + ST-LINK, needs the board).
+function(pge_f429_firmware tgt flash_tgt)
+  target_compile_options(${tgt} PRIVATE -Wall -Wextra)
+  # --undefined pulls the startup object (vector table) out of the archive
+  target_link_options(${tgt} PRIVATE -T${LD} -Wl,--undefined=Reset_Handler -Wl,-Map=$<TARGET_FILE_DIR:${tgt}>/${tgt}.map)
+  set_target_properties(${tgt} PROPERTIES SUFFIX .elf LINK_DEPENDS ${LD})
+  add_custom_command(TARGET ${tgt} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${tgt}> $<TARGET_FILE_DIR:${tgt}>/${tgt}.bin
+    COMMAND ${CMAKE_OBJCOPY} -O ihex   $<TARGET_FILE:${tgt}> $<TARGET_FILE_DIR:${tgt}>/${tgt}.hex
+    COMMAND ${CMAKE_SIZE} $<TARGET_FILE:${tgt}>)
+  add_custom_target(${flash_tgt}
+    COMMAND openocd -f interface/stlink.cfg -c "transport select hla_swd" -f target/stm32f4x.cfg
+            -c "program $<TARGET_FILE:${tgt}> verify reset exit"
+    DEPENDS ${tgt}
+    USES_TERMINAL)
+endfunction()
+
+# core first in link order: it needs the display/time HAL symbols
 add_executable(pge_f429_scene ${CMAKE_SOURCE_DIR}/examples/f429/main.cpp)
 target_include_directories(pge_f429_scene PRIVATE ${CMAKE_SOURCE_DIR}/examples/proto)
-target_compile_options(pge_f429_scene PRIVATE -Wall -Wextra)
-target_link_libraries(pge_f429_scene PRIVATE pge_core pge_f429_hal)   # core first: it needs the display/time HAL symbols
-add_dependencies(pge_f429_scene pge_b1)   # compile-check b1.cpp for ARM; not linked
+target_link_libraries(pge_f429_scene PRIVATE pge_core pge_f429_hal)
+add_dependencies(pge_f429_scene pge_b1)   # compile-check b1.cpp for ARM
+pge_f429_firmware(pge_f429_scene flash_f429)
 
-set(LD ${CMAKE_CURRENT_SOURCE_DIR}/STM32F429ZITX_FLASH.ld)
-# --undefined pulls the startup object (vector table) out of the archive
-target_link_options(pge_f429_scene PRIVATE -T${LD} -Wl,--undefined=Reset_Handler -Wl,-Map=$<TARGET_FILE_DIR:pge_f429_scene>/pge_f429_scene.map)
-set_target_properties(pge_f429_scene PROPERTIES SUFFIX .elf LINK_DEPENDS ${LD})
+add_executable(pge_f429_b1 ${CMAKE_SOURCE_DIR}/examples/f429/b1_main.cpp)
+target_link_libraries(pge_f429_b1 PRIVATE pge_b1 pge_core pge_f429_hal)   # pge_b1 pulls pge_core; core again after b1
+pge_f429_firmware(pge_f429_b1 flash_f429_b1)
 
-add_custom_command(TARGET pge_f429_scene POST_BUILD
-  COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:pge_f429_scene> $<TARGET_FILE_DIR:pge_f429_scene>/pge_f429_scene.bin
-  COMMAND ${CMAKE_OBJCOPY} -O ihex   $<TARGET_FILE:pge_f429_scene> $<TARGET_FILE_DIR:pge_f429_scene>/pge_f429_scene.hex
-  COMMAND ${CMAKE_SIZE} $<TARGET_FILE:pge_f429_scene>)
-
-add_custom_target(flash_f429
-  COMMAND openocd -f interface/stlink.cfg -c "transport select hla_swd" -f target/stm32f4x.cfg
-          -c "program $<TARGET_FILE:pge_f429_scene> verify reset exit"
-  DEPENDS pge_f429_scene
-  USES_TERMINAL)
+add_executable(pge_f429_input ${CMAKE_SOURCE_DIR}/examples/f429/input_main.cpp)
+target_link_libraries(pge_f429_input PRIVATE pge_core pge_f429_hal)
+pge_f429_firmware(pge_f429_input flash_f429_input)

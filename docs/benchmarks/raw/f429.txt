@@ -1,0 +1,142 @@
+# B1 raw numbers, STM32F429I-DISCO, MEASURED 2026-11-15
+# board: STM32F429ZIT6 @ 180 MHz (HSE 8 MHz, PLL 8/360/2, overdrive), 8 MB SDRAM, LTDC RGB565 240x320 panel, firmware pge_f429_b1
+# build: arm-none-eabi-g++ 10.3.1, Release -O2 -g, -std=c++17 -fno-exceptions -fno-rtti; timing = DWT cycle counter via pge_hal_time_us
+# flush runs synchronously in the CPU (DMA2D polled); LTDC scans out the same framebuffer concurrently (no vsync) except variant D
+# variant D (backbuf + vsync): every item reads 15306 us/frame = frame time quantised to the panel refresh (about 65.3 Hz), so D shows the refresh period, not render cost
+# 30 timed frames per item after 1 warm-up frame; band buffers: sram = internal SRAM, sdram = 0xD0200000
+
+# B1 f429 sysclk=180000000 build=Release -O2 cube=HAL frames=30 warmup=1 rgb565 ltdc
+# variant=A orientation=landscape-transposed flush=cpu-transpose vsync=off logical=320x240
+# bandbuf=sram
+band=8 item=clear frames=30 us_per_frame=6149 us_per_band=204 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=flush_only frames=30 us_per_frame=5050 us_per_band=168 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=sprites_opaque frames=30 us_per_frame=9472 us_per_band=315 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=sprites_transparent frames=30 us_per_frame=9697 us_per_band=323 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=tiles8_static frames=30 us_per_frame=13869 us_per_band=462 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=tiles16_static frames=30 us_per_frame=12914 us_per_band=430 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=tiles8_scroll frames=30 us_per_frame=15012 us_per_band=500 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=tiles16_scroll frames=30 us_per_frame=13250 us_per_band=441 bands_per_frame=30 band_buf_bytes=5120
+band=16 item=clear frames=30 us_per_frame=5901 us_per_band=393 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=flush_only frames=30 us_per_frame=4809 us_per_band=320 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_opaque frames=30 us_per_frame=7816 us_per_band=521 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_transparent frames=30 us_per_frame=8031 us_per_band=535 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_static frames=30 us_per_frame=13602 us_per_band=906 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_static frames=30 us_per_frame=12343 us_per_band=822 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_scroll frames=30 us_per_frame=14196 us_per_band=946 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_scroll frames=30 us_per_frame=12686 us_per_band=845 bands_per_frame=15 band_buf_bytes=10240
+band=32 item=clear frames=30 us_per_frame=5786 us_per_band=723 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=flush_only frames=30 us_per_frame=4694 us_per_band=586 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=sprites_opaque frames=30 us_per_frame=7040 us_per_band=880 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=sprites_transparent frames=30 us_per_frame=7251 us_per_band=906 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=tiles8_static frames=30 us_per_frame=13476 us_per_band=1684 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=tiles16_static frames=30 us_per_frame=12211 us_per_band=1526 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=tiles8_scroll frames=30 us_per_frame=13811 us_per_band=1726 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=tiles16_scroll frames=30 us_per_frame=12413 us_per_band=1551 bands_per_frame=8 band_buf_bytes=20480
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)
+# bandbuf=sdram
+band=240 item=clear frames=30 us_per_frame=14398 us_per_band=14398 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=flush_only frames=30 us_per_frame=13225 us_per_band=13225 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=sprites_opaque frames=30 us_per_frame=15156 us_per_band=15156 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=sprites_transparent frames=30 us_per_frame=15300 us_per_band=15300 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=tiles8_static frames=30 us_per_frame=23461 us_per_band=23461 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=tiles16_static frames=30 us_per_frame=22165 us_per_band=22165 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=tiles8_scroll frames=30 us_per_frame=23542 us_per_band=23542 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=tiles16_scroll frames=30 us_per_frame=22220 us_per_band=22220 bands_per_frame=1 band_buf_bytes=153600
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)
+micro flush mode=cpu-transpose band=320x8 reps=100 avg_us=138.43
+micro flush mode=cpu-transpose band=320x16 reps=100 avg_us=261.39
+micro flush mode=cpu-transpose band=320x32 reps=100 avg_us=507.29
+# variant=B orientation=portrait-native flush=cpu-memcpy vsync=off logical=240x320
+# bandbuf=sram
+band=8 item=clear frames=30 us_per_frame=8506 us_per_band=212 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=flush_only frames=30 us_per_frame=7408 us_per_band=185 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=sprites_opaque frames=30 us_per_frame=12770 us_per_band=319 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=sprites_transparent frames=30 us_per_frame=13007 us_per_band=325 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=tiles8_static frames=30 us_per_frame=15383 us_per_band=384 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=tiles16_static frames=30 us_per_frame=14520 us_per_band=363 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=tiles8_scroll frames=30 us_per_frame=15959 us_per_band=398 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=tiles16_scroll frames=30 us_per_frame=14448 us_per_band=361 bands_per_frame=40 band_buf_bytes=3840
+band=16 item=clear frames=30 us_per_frame=8479 us_per_band=423 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=flush_only frames=30 us_per_frame=7377 us_per_band=368 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=sprites_opaque frames=30 us_per_frame=10861 us_per_band=543 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=sprites_transparent frames=30 us_per_frame=11079 us_per_band=553 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=tiles8_static frames=30 us_per_frame=15326 us_per_band=766 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=tiles16_static frames=30 us_per_frame=14184 us_per_band=709 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=tiles8_scroll frames=30 us_per_frame=15426 us_per_band=771 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=tiles16_scroll frames=30 us_per_frame=14130 us_per_band=706 bands_per_frame=20 band_buf_bytes=7680
+band=32 item=clear frames=30 us_per_frame=8464 us_per_band=846 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=flush_only frames=30 us_per_frame=7366 us_per_band=736 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=sprites_opaque frames=30 us_per_frame=9902 us_per_band=990 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=sprites_transparent frames=30 us_per_frame=10117 us_per_band=1011 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=tiles8_static frames=30 us_per_frame=15289 us_per_band=1528 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=tiles16_static frames=30 us_per_frame=14153 us_per_band=1415 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=tiles8_scroll frames=30 us_per_frame=15144 us_per_band=1514 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=tiles16_scroll frames=30 us_per_frame=13952 us_per_band=1395 bands_per_frame=10 band_buf_bytes=15360
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)
+# bandbuf=sdram
+band=320 item=clear frames=30 us_per_frame=19142 us_per_band=19142 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=flush_only frames=30 us_per_frame=17964 us_per_band=17964 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=sprites_opaque frames=30 us_per_frame=19890 us_per_band=19890 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=sprites_transparent frames=30 us_per_frame=20019 us_per_band=20019 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=tiles8_static frames=30 us_per_frame=27186 us_per_band=27186 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=tiles16_static frames=30 us_per_frame=26015 us_per_band=26015 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=tiles8_scroll frames=30 us_per_frame=26754 us_per_band=26754 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=tiles16_scroll frames=30 us_per_frame=25626 us_per_band=25626 bands_per_frame=1 band_buf_bytes=153600
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)
+micro flush mode=cpu-memcpy band=240x8 reps=100 avg_us=162.31
+micro flush mode=cpu-memcpy band=240x16 reps=100 avg_us=324.05
+micro flush mode=cpu-memcpy band=240x32 reps=100 avg_us=647.08
+# variant=C orientation=portrait-native flush=dma2d vsync=off logical=240x320
+# bandbuf=sram
+band=8 item=clear frames=30 us_per_frame=3015 us_per_band=75 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=flush_only frames=30 us_per_frame=1904 us_per_band=47 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=sprites_opaque frames=30 us_per_frame=7280 us_per_band=182 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=sprites_transparent frames=30 us_per_frame=7511 us_per_band=187 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=tiles8_static frames=30 us_per_frame=9898 us_per_band=247 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=tiles16_static frames=30 us_per_frame=9038 us_per_band=225 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=tiles8_scroll frames=30 us_per_frame=10475 us_per_band=261 bands_per_frame=40 band_buf_bytes=3840
+band=8 item=tiles16_scroll frames=30 us_per_frame=8957 us_per_band=223 bands_per_frame=40 band_buf_bytes=3840
+band=16 item=clear frames=30 us_per_frame=2980 us_per_band=149 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=flush_only frames=30 us_per_frame=1876 us_per_band=93 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=sprites_opaque frames=30 us_per_frame=5364 us_per_band=268 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=sprites_transparent frames=30 us_per_frame=5580 us_per_band=279 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=tiles8_static frames=30 us_per_frame=9826 us_per_band=491 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=tiles16_static frames=30 us_per_frame=8687 us_per_band=434 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=tiles8_scroll frames=30 us_per_frame=9926 us_per_band=496 bands_per_frame=20 band_buf_bytes=7680
+band=16 item=tiles16_scroll frames=30 us_per_frame=8628 us_per_band=431 bands_per_frame=20 band_buf_bytes=7680
+band=32 item=clear frames=30 us_per_frame=2962 us_per_band=296 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=flush_only frames=30 us_per_frame=1864 us_per_band=186 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=sprites_opaque frames=30 us_per_frame=4402 us_per_band=440 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=sprites_transparent frames=30 us_per_frame=4613 us_per_band=461 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=tiles8_static frames=30 us_per_frame=9789 us_per_band=978 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=tiles16_static frames=30 us_per_frame=8651 us_per_band=865 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=tiles8_scroll frames=30 us_per_frame=9652 us_per_band=965 bands_per_frame=10 band_buf_bytes=15360
+band=32 item=tiles16_scroll frames=30 us_per_frame=8459 us_per_band=845 bands_per_frame=10 band_buf_bytes=15360
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)
+# bandbuf=sdram
+band=320 item=clear frames=30 us_per_frame=5405 us_per_band=5405 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=flush_only frames=30 us_per_frame=4225 us_per_band=4225 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=sprites_opaque frames=30 us_per_frame=6154 us_per_band=6154 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=sprites_transparent frames=30 us_per_frame=6284 us_per_band=6284 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=tiles8_static frames=30 us_per_frame=13449 us_per_band=13449 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=tiles16_static frames=30 us_per_frame=12276 us_per_band=12276 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=tiles8_scroll frames=30 us_per_frame=13017 us_per_band=13017 bands_per_frame=1 band_buf_bytes=153600
+band=320 item=tiles16_scroll frames=30 us_per_frame=11889 us_per_band=11889 bands_per_frame=1 band_buf_bytes=153600
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)
+micro flush mode=dma2d band=240x8 reps=100 avg_us=24.95
+micro flush mode=dma2d band=240x16 reps=100 avg_us=49.10
+micro flush mode=dma2d band=240x32 reps=100 avg_us=97.23
+micro fill mode=cpu size=240x320 reps=100 avg_us=1049.34
+micro fill mode=dma2d size=240x320 reps=100 avg_us=965.39
+# variant=D orientation=landscape-transposed flush=cpu-transpose vsync=on logical=320x240
+# bandbuf=sram
+band=16 item=clear frames=30 us_per_frame=15306 us_per_band=1020 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=flush_only frames=30 us_per_frame=15306 us_per_band=1020 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_opaque frames=30 us_per_frame=15306 us_per_band=1020 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_transparent frames=30 us_per_frame=15306 us_per_band=1020 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_static frames=30 us_per_frame=15306 us_per_band=1020 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_static frames=30 us_per_frame=15306 us_per_band=1020 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_scroll frames=30 us_per_frame=15306 us_per_band=1020 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_scroll frames=30 us_per_frame=15306 us_per_band=1020 bands_per_frame=15 band_buf_bytes=10240
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)
+# B1 DONE

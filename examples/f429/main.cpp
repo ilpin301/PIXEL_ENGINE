@@ -8,6 +8,9 @@
 #ifndef PGE_F429_ROT
 #define PGE_F429_ROT 0
 #endif
+#ifndef PGE_F429_BACKBUF
+#define PGE_F429_BACKBUF 0
+#endif
 
 static pge::Color g_band[320 * 16];
 
@@ -15,8 +18,9 @@ static void render(pge::Canvas& c, void* ctx) { scene::renderScene(c, (int)*stat
 
 int main() {
   pge_board_init();
-  pge_dbg_printf("# pge_f429_scene sysclk=%lu orientation=landscape-transposed ROT=%d fb=0xD0000000 RGB565 ltdc\n",
-                 (unsigned long)pge_board_sysclk_hz(), PGE_F429_ROT);
+  pge_dbg_printf("# pge_f429_scene sysclk=%lu orientation=landscape-transposed ROT=%d fb=0xD0000000 RGB565 ltdc backbuf=%d\n",
+                 (unsigned long)pge_board_sysclk_hz(), PGE_F429_ROT, PGE_F429_BACKBUF);
+  pge_f429_set_opts(0, PGE_F429_BACKBUF);
 
   pge_display_info info;
   if (pge_hal_display_init(320, 240, &info) != 0) {
