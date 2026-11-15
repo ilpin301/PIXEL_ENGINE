@@ -23,7 +23,7 @@
 | S4.2b | plan/PLAN-S4-mve.md | done 2026-11-15 |
 | S4.3 | plan/PLAN-S4-mve.md | done 2026-11-15 (board check passed: user confirmed buttons, stick, touch in pge_f429_input and the scroller on the F429 board) |
 | S4.4 | plan/PLAN-S4-mve.md | done 2026-11-15 (G4 passed: user played the platformer on the F429 board; stick X inverted in the HAL; benchmark in docs/benchmarks/stage4.md) |
-| S4.5 | plan/PLAN-S4-mve.md | todo |
+| S4.5 | plan/PLAN-S4-mve.md | deferred by user 2026-11-15 (ESP32-S3 set aside; resume when the user says so; ESP-IDF still missing) |
 | S5.1a | plan/PLAN-S5-advanced.md | todo |
 | S5.1b | plan/PLAN-S5-advanced.md | todo |
 | S5.2 | plan/PLAN-S5-advanced.md | todo |
@@ -40,7 +40,7 @@
 
 ## Resume point
 
-Next: S4.5 (plan/PLAN-S4-mve.md, board needed; ESP-IDF not installed, see docs/dev/toolchain.md). Read set: PLAN.md protocol + Key decisions, plan/PLAN-S4-mve.md, STATUS.md, docs/benchmarks/stage4.md summary block, examples/platformer/game.h, hal/include/pge/hal/*.h. Start in a fresh session: "Run session S4.5 from PLAN.md".
+Next: S5.1a (plan/PLAN-S5-advanced.md, host only). S4.5 is deferred (see decision log); run it later when the user asks. Read set: PLAN.md protocol + Key decisions, plan/PLAN-S5-advanced.md, STATUS.md, docs/architecture/03-world-entity-storage-api.md sections 2-3, core/include/pge/{gfx,camera,collision}.h. Start in a fresh session: "Run session S5.1a from PLAN.md".
 
 ## Decision log (append-only)
 
@@ -71,6 +71,7 @@ Next: S4.5 (plan/PLAN-S4-mve.md, board needed; ESP-IDF not installed, see docs/d
 - 2026-11-15 S4.4: no Key decision K1-K15 changed. Built core/include/pge/collision.h + core/src/physics/collision.cpp (TileProps flags solid 0x01 / one-way 0x02 / hazard 0x04, TileGrid, Body, MoveResult, moveAndCollide), examples/platformer (game.h, main.cpp), examples/f429/platformer_main.cpp with three F429 firmware targets (pge_f429_platformer, pge_f429_platbench, pge_f429_platbench_nobb), tests/test_collision.cpp, tests/test_platformer.cpp, report docs/benchmarks/stage4.md, raw docs/benchmarks/raw/f429-platformer.txt. Decisions: X axis then Y axis with sub-steps of at most one tile; one-way blocks only when moving down from above; hazard reported, never blocks; outside the grid is solid; ints and TileGrid instead of Fix and World (deviation from 03 section 3.1, World overload with S5.1a); gravity, jump, coyote and jump buffer are game code in the example; game.h is platform-free so S4.5 reuses it. Results: ctest 10/10 (version gfx bench core prims sprites camera input collision platformer), 20,000 random collision cases match a 1-pixel-step oracle, 3 mutation checks fail the test, 4000 autoplay ticks 0 deaths; F429 measured 2026-11-15 (180 MHz, Release, landscape 320x240 + CPU transpose, band 32, 1800 samples): run A vsync back buffer tick 13 / band 12,494 / flush 16,172 / frame 28,666 us, run B no vsync tick 13 / band 12,504 / flush 4,915 / frame 17,419 us, no drops or overruns; calculated 57 frames/s without vsync, 35 with vsync, F429 30 fps target met in both; firmware text 43,468 / data 40,616 / bss 79,232 B. Effective compile level is -O3 (build.ninja has -O2 -g -O3), stage3.md says -O2: not verified for S3. Not verified: K15 scale cost, portrait + DMA2D, HUD fps on screen, tiles-vs-sprite split, ESP32-S3, G4 play and tearing check on the board (pending user). Deviation: about 13 files touched (cap 8, protocol rule 5); not split because collision module, example, tests and F429 targets form one unit; run as core and example subagent tasks.
 - 2026-11-15 S4.4 stick fix: during the user's G4 play check the KY-023 stick X axis was reported inverted (right pushed the player left). Fix in platform/stm32f429i_disco/input_gpio.c: the X axis is negated before the RIGHT/LEFT thresholds and out->axis[0] (Y unchanged); this also affects pge_f429_scroller and pge_f429_input (same HAL), whose earlier S4.3 'stick works' check did not verify direction. pge_f429_platformer was rebuilt and reflashed; direction re-check by the user pending. Host tests unaffected (ctest 10/10 before the change; HAL file is ARM only).
 - 2026-11-15 G4 passed (user: "G4 passed"): platformer played on the STM32F429I-DISCO board; K1-K15 unchanged; tearing by eye was part of the check but the user gave no separate detail.
+- 2026-11-15 S4.5 deferred by the user ("put everything related to esp aside for now and continue"): K1 itself is not changed (ESP32-S3 stays the second port and the universality proof), only its timing; consequences: the claim that the engine core needs no change for a second board stays UNPROVEN until S4.5 runs, so the platformer must still run unchanged there; the ESP32-S3 I2S audio backend in S5.5 and the ESP parts of S7.1/S7.2a are deferred or written untested/Tier B-style until S4.5 is done; S5.1a-S5.4, S5.6, S6.1 are host/F429 only and proceed; any core change that later turns out to be a portability defect is logged as such then.
 
 ## Open questions
 
