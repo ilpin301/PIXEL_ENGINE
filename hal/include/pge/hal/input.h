@@ -15,6 +15,9 @@ extern "C" {
 #define PGE_BTN_START  0x40
 #define PGE_BTN_SELECT 0x80
 
+/* touch_x/touch_y: DISPLAY pixel coordinates of the landscape plane that flush rects use (origin top-left);
+ * touch_down is 1 while a finger / mouse button is down (x/y are 0 otherwise).
+ * axis[]: -32768..32767, 0 = centre, axis[0] +right, axis[1] +down. */
 typedef struct {
   uint32_t buttons;  /* PGE_BTN_* bits, plus PGE_INPUT_QUIT */
   int16_t axis[4];

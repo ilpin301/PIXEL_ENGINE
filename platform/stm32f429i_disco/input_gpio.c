@@ -3,16 +3,35 @@
  * PD5 menu, PB7 stick switch (all low, internal pull-up) | stick VRy PC3 = ADC1_IN13 (horizontal),
  * VRx PA5 = ADC1_IN5 (vertical).  Unconnected stick pins float: the centre and the direction bits are then noise.
  * Mapping: A = PC11 | PA0, B = PC12, SELECT = PD2, START = PD5.  PD4 and PB7 are read but unmapped:
- * there is no free PGE_BTN_* bit.  touch_down stays 0 (touch comes in S4.3); PGE_INPUT_QUIT is never set.
+ * there is no free PGE_BTN_* bit.  PGE_INPUT_QUIT is never set.
+ * Touch (S4.3): STMPE811 via the BSP (BSP_TS_*, I2C3), reported in landscape display coordinates.  If the controller
+ * is not found, touch stays disabled (touch_down = 0) and input init still succeeds.
  * Axis sign (to verify on the board): axis = ADC reading minus the centre taken at init, scaled to int16, so
  * axis[0] > 0 = RIGHT and axis[1] > 0 = DOWN if the voltage rises that way; flip the sign here if not. */
 #include "pge/hal/input.h"
 #include "stm32f4xx_hal.h"
+#include "stm32f429i_discovery_ts.h"
 
 #define AXIS_DEAD 12000
 
+#ifndef PGE_F429_ROT
+#define PGE_F429_ROT 0  /* keep equal to display_ltdc.c */
+#endif
+
+/* mapping table per platform (S4.3); bit 0 = read but unmapped (no free PGE_BTN_* bit) */
+static const struct { GPIO_TypeDef* port; uint16_t pin; uint8_t active_high; uint32_t bit; } kButtons[] = {
+  {GPIOC, GPIO_PIN_11, 0, PGE_BTN_A},
+  {GPIOA, GPIO_PIN_0, 1, PGE_BTN_A},
+  {GPIOC, GPIO_PIN_12, 0, PGE_BTN_B},
+  {GPIOD, GPIO_PIN_2, 0, PGE_BTN_SELECT},
+  {GPIOD, GPIO_PIN_5, 0, PGE_BTN_START},
+  {GPIOD, GPIO_PIN_4, 0, 0},
+  {GPIOB, GPIO_PIN_7, 0, 0},
+};
+
 static ADC_HandleTypeDef s_adc;
 static int s_ready;
+static int s_touch;   /* 1 = STMPE811 found at init */
 static int32_t s_centre[2] = {2048, 2048};
 
 static uint32_t adc_read(uint32_t channel) {
@@ -83,6 +102,7 @@ int pge_hal_input_init(void) {
   }
   s_centre[0] = (int32_t)(sum0 / 16u);
   s_centre[1] = (int32_t)(sum1 / 16u);
+  s_touch = BSP_TS_Init(240, 320) == TS_OK;   /* portrait panel size; missing controller is not fatal */
   s_ready = 1;
   return 0;
 }
@@ -90,11 +110,9 @@ int pge_hal_input_init(void) {
 int pge_hal_input_poll(pge_raw_input* out) {
   if (!out || !s_ready) return -1;
   uint32_t b = 0;
-  if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_11) == GPIO_PIN_RESET || HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET)
-    b |= PGE_BTN_A;
-  if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_12) == GPIO_PIN_RESET) b |= PGE_BTN_B;
-  if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_2) == GPIO_PIN_RESET) b |= PGE_BTN_SELECT;
-  if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_5) == GPIO_PIN_RESET) b |= PGE_BTN_START;
+  for (unsigned i = 0; i < sizeof kButtons / sizeof kButtons[0]; i++)
+    if ((HAL_GPIO_ReadPin(kButtons[i].port, kButtons[i].pin) == GPIO_PIN_SET) == kButtons[i].active_high)
+      b |= kButtons[i].bit;
 
   int16_t ax = scale(adc_read(ADC_CHANNEL_13), s_centre[0]);
   int16_t ay = scale(adc_read(ADC_CHANNEL_5), s_centre[1]);
@@ -111,5 +129,21 @@ int pge_hal_input_poll(pge_raw_input* out) {
   out->touch_down = 0;
   out->touch_x = 0;
   out->touch_y = 0;
+  if (s_touch) {
+    TS_StateTypeDef ts;
+    BSP_TS_GetState(&ts);
+    if (ts.TouchDetected) {
+      /* orientation/axis swap of the STMPE811 relative to the LCD: to verify on the board (S4.3) */
+      int px = ts.X, py = ts.Y;   /* portrait 240x320 */
+#if PGE_F429_ROT
+      int x = py, y = 239 - px;
+#else
+      int x = 319 - py, y = px;
+#endif
+      out->touch_down = 1;
+      out->touch_x = (int16_t)(x < 0 ? 0 : x > 319 ? 319 : x);
+      out->touch_y = (int16_t)(y < 0 ? 0 : y > 239 ? 239 : y);
+    }
+  }
   return 0;
 }

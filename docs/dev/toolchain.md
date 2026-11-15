@@ -81,3 +81,8 @@ Restore the original board firmware (same interface/transport/target args):
 ```bash
 openocd -f interface/stlink.cfg -c "transport select hla_swd" -f target/stm32f4x.cfg -c "program F:/____IL_CPP/STM32F429I-DISCO/backup/flash_backup_0x08000000_2MB.bin 0x08000000 verify reset exit"
 ```
+
+## S4.3 scroller and touch
+- Host scroller: `build/examples/scroller/pge_scroller.exe [--ticks N] [--shot out.bmp]` (arrows/WASD scroll, Z faster, left mouse button recentres the camera; `--ticks` quits after N ticks, `--shot` saves the window to a BMP).
+- F429 input test (buttons, stick, touch crosshair): `cmake --build build-f429 --target flash_f429_input` (board needed).
+- F429 scroller (`pge_f429_scroller`, same game as the host): `cmake --build build-f429 --target flash_f429_scroller` (board needed).

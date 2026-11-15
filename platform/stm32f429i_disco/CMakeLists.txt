@@ -20,6 +20,8 @@ add_library(pge_f429_hal STATIC
   ${BSP}/stm32f429i_discovery.c
   ${BSP}/stm32f429i_discovery_lcd.c   # #includes Utilities/Fonts/font*.c itself
   ${BSP}/stm32f429i_discovery_sdram.c
+  ${BSP}/stm32f429i_discovery_ts.c    # touch (S4.3); needs only IOE_* from stm32f429i_discovery.c, not _io.c
+  ${PGE_CUBE_DIR}/Drivers/BSP/Components/stmpe811/stmpe811.c
   ${PGE_CUBE_DIR}/Drivers/BSP/Components/ili9341/ili9341.c
   ${CMSIS_DEV}/Source/Templates/system_stm32f4xx.c
   ${CMSIS_DEV}/Source/Templates/gcc/startup_stm32f429xx.s
@@ -33,7 +35,7 @@ target_include_directories(pge_f429_hal PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}   # board.h, stm32f4xx_hal_conf.h
   ${PGE_CUBE_DIR}/Drivers/CMSIS/Include ${CMSIS_DEV}/Include ${HAL}/Inc ${BSP}
   ${PGE_CUBE_DIR}/Drivers/BSP/Components/Common ${PGE_CUBE_DIR}/Drivers/BSP/Components/ili9341
-  ${PGE_CUBE_DIR}/Utilities/Fonts ${CMAKE_SOURCE_DIR}/hal/include)
+  ${PGE_CUBE_DIR}/Drivers/BSP/Components/stmpe811 ${PGE_CUBE_DIR}/Utilities/Fonts ${CMAKE_SOURCE_DIR}/hal/include)
 
 set(LD ${CMAKE_CURRENT_SOURCE_DIR}/STM32F429ZITX_FLASH.ld)
 # One firmware image: elf + map + bin + hex + size, plus a flash_<name> target (openocd + ST-LINK, needs the board).
@@ -67,3 +69,8 @@ pge_f429_firmware(pge_f429_b1 flash_f429_b1)
 add_executable(pge_f429_input ${CMAKE_SOURCE_DIR}/examples/f429/input_main.cpp)
 target_link_libraries(pge_f429_input PRIVATE pge_core pge_f429_hal)
 pge_f429_firmware(pge_f429_input flash_f429_input)
+
+add_executable(pge_f429_scroller ${CMAKE_SOURCE_DIR}/examples/f429/scroller_main.cpp)
+target_include_directories(pge_f429_scroller PRIVATE ${CMAKE_SOURCE_DIR}/examples/scroller)
+target_link_libraries(pge_f429_scroller PRIVATE pge_core pge_f429_hal)
+pge_f429_firmware(pge_f429_scroller flash_f429_scroller)

@@ -66,9 +66,9 @@ void Engine::pace() {
 
 void Engine::pollInput() {
   pge_raw_input raw = {};
-  if (pge_hal_input_poll(&raw) != 0) raw.buttons = 0;
+  if (pge_hal_input_poll(&raw) != 0) raw = {};  // a failed poll may leave garbage in raw
   if (raw.buttons & PGE_INPUT_QUIT) quit_ = true;
-  input_.update(raw.buttons);
+  input_.update(raw, PGE_SCALE);
 }
 
 void Engine::recordTick(uint32_t us) {

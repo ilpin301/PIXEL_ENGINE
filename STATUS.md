@@ -21,7 +21,7 @@
 | S4.1 | plan/PLAN-S4-mve.md | done 2026-11-15 |
 | S4.2a | plan/PLAN-S4-mve.md | done 2026-11-15 |
 | S4.2b | plan/PLAN-S4-mve.md | done 2026-11-15 |
-| S4.3 | plan/PLAN-S4-mve.md | todo |
+| S4.3 | plan/PLAN-S4-mve.md | done 2026-11-15 (board check passed: user confirmed buttons, stick, touch in pge_f429_input and the scroller on the F429 board) |
 | S4.4 | plan/PLAN-S4-mve.md | todo |
 | S4.5 | plan/PLAN-S4-mve.md | todo |
 | S5.1a | plan/PLAN-S5-advanced.md | todo |
@@ -40,7 +40,7 @@
 
 ## Resume point
 
-Next: S4.3 (plan/PLAN-S4-mve.md, board needed for the F429 input part). Read set: PLAN.md protocol + Key decisions, plan/PLAN-S4-mve.md, STATUS.md, core/include/pge/{gfx,config}.h, core/src/gfx/gfx.cpp (tilemap + blit), platform/stm32f429i_disco/input_gpio.c, platform/host input backends, tests/test_sprites.cpp (golden + reference-model style). Start in a fresh session: "Run session S4.3 from PLAN.md".
+Next: S4.4 (plan/PLAN-S4-mve.md, board needed). Read set: PLAN.md protocol + Key decisions, plan/PLAN-S4-mve.md, STATUS.md, core/include/pge/{gfx,camera,engine}.h, examples/scroller/game.h. Start in a fresh session: "Run session S4.4 from PLAN.md".
 
 ## Decision log (append-only)
 
@@ -66,6 +66,8 @@ Next: S4.3 (plan/PLAN-S4-mve.md, board needed for the F429 input part). Read set
 - 2026-11-15 S4.1: no Key decision K1-K15 changed. Built core/include/pge/{error,config,memory,timestep,engine}.h + core/src/base/engine.cpp, platform pge_profile.h for host and F429 (found through PGE_PROFILE_DIR include dir), platform/host/input_null.cpp (in pge_platform_host_null), examples/empty (pge_empty), tests/test_core.cpp. Decisions: (a) tick rate PGE_TICK_HZ default 60, user/profile overridable; (b) overrun policy: Timestep accumulates elapsed us, runs up to PGE_MAX_CATCHUP (default 5) ticks per loop pass, drops the excess whole periods, keeps phase, counts ticks_dropped and tick_overruns in Stats; (c) render at most once per loop pass and only if a tick ran, loop sleeps (pge_hal_time_delay_us) when no tick is due; on the 65.3 Hz F429 panel with vsync back buffer the 60 Hz tick drifts against vsync, accepted, render is not tied to tick; (d) period = 1000000/hz truncated, 60 Hz runs 40 ppm fast (shortcut comment in timestep.h); (e) contradiction init arena: init arena stays open through onCreate and is locked when the first tick starts (K5 holds from the first tick); (f) contradiction pool exhaustion: Pool<T,N>::alloc returns invalid handle 0xFFFF and counts pool_full, never allocates; double free detected, no generation counter (stale reused handle not detected); (g) Error is an unscoped enum in pge/error.h, values Ok=0 and negatives, gfx.h includes it; (h) Stats lives in engine.h with the spec names (tick_us, tick_us_max, frame_us, band_us, band_us_max, flush_us, fps, pool_high[8], pool_full[8]) plus ticks, ticks_dropped, tick_overruns; band_us = sum of onRender time over bands, flush_us = frame_us - band_us (includes pre-clear), renderFrame not instrumented; (i) Input is a minimal button-edge class, axes/touch/mapping are S4.3; (j) docs mismatches found, not edited: 01-overview says LARGE band_lines 16 (G3 accepted 32, code uses 32), SMALL logical 160x128 in 01 vs 160x120 in 02 section 4 (code uses 160x128), PGE_ASSERT/PGE_CHECK from 02 section 5 not implemented yet. Results: ctest 4/4 passed (version, gfx, bench, core); `pge_empty --seconds 3` = 180 ticks in 2999 ms, dropped 0, overruns 0, fps 61, tick_us about 1-11, frame_us about 190 (null display); arm-none-eabi pge_core builds (engine.cpp object text 1228 B, bss 69,632 B = the two static arenas 65,536 + 4,096); F429 firmware and on-board behaviour not built or run. Deviation: session touched 12 new files (about 709 lines incl. tests and example) and 5 edited files, over the protocol rule 5 cap (about 600 lines, 8 files); not split because the parts are one lifecycle unit; recorded here.
 - 2026-11-15 S4.2a: no Key decision K1-K15 changed. Built: Canvas::pixel/line/rect/circle/fillCircle/text + textWidth + dropped(), pge/color.h (rgb, red8/green8/blue8, kPalette16; a palette is a plain `const Color[]`, no Palette class), built-in 5x7 ASCII font kFont5x7 (authored in-repo, rows-per-glyph format, 677 B), integer output scale in renderFrame via RenderConfig{scale, stage, stage_pixels} (display-coordinate flush rects, window origin not implemented, deferred to S5.6), PGE_SCALE + PGE_SCALE_STAGING_BYTES in config.h, Engine scaled display init + stage buffer + Stats::draw_dropped, examples/gfxdemo (pge_gfxdemo, SDL, --scale/--frames/--shot/--band), tests/test_prims.cpp. Decisions: (a) line = integer Bresenham stepping from the first endpoint, no swap, per-pixel clip; coords beyond kMaxCoord 16384 are dropped and counted (shortcut: per-band cost O(length), Liang-Barsky if profiling asks); (b) circle = midpoint; fillCircle half-width = isqrt(r*r + r - dy*dy), outlines lie inside fills for r 0..40; (c) draw_dropped counts only invalid-argument calls (radius < 0, coord > kMaxCoord, null string/font), once per frame (counted only when the band starts at row 0), plain clipping is not a drop; (d) scale staging size = (N*s)*(W*s)*2 B with W = logical width; the 01-overview section 5.3 table and formula understate it (MEDIUM s=2 N=16: 40,960 B not 20,480; LARGE s=3 N=32: 184,320 B); docs not edited; default PGE_SCALE is 1 so no staging RAM unless a game sets PGE_SCALE; (e) Engine scale is compile-time (PGE_SCALE) while the gfxdemo scale is runtime through renderFrame, because core is built once with scale 1; (f) font: 5x7, spacing 1, '\n' supported, chars outside 32..126 draw '?'. Results: ctest 5/5 (version, gfx, bench, core, prims); gfxdemo band 16 vs band 240 BMPs byte-identical (cmp) at scale 1 and 2; scale 1/2/3 frames checked by eye; prims tests = 15 ASCII goldens, clip-vs-crop and band-vs-full property tests, scale s x s repeat check, drop counters, color and textWidth; mutation checks (remove +r in fillCircle, swap line endpoints on band canvas) make tests fail; arm-none-eabi pge_core builds (text: draw.o 1880 B, font5x7.o 677 B, gfx.o 2428 B); engine.cpp compiles with -DPGE_SCALE=2 and fails the static_assert at 4. Not verified: Engine path with PGE_SCALE > 1 only compile-checked, never run; K15 render-vs-flush cost on the F429 not measured (stage3.md deferred it here, now deferred to S4.3/S4.4 benchmark or later); goldens captured from the implementation and checked by eye, not derived independently; a very long text string could overflow the x cursor (unguarded). Deviation: session touched 6 new and 7 edited files with about 1,000 new lines (test_prims.cpp alone 517), over the protocol rule 5 cap (about 600 lines, 8 files); not split because primitives, text, scale and their tests form one unit; recorded here.
 - 2026-11-15 S4.2b: no Key decision K1-K15 changed. Built: SpriteFlags gained Rot90/Rot180/Rot270 (bits 2-3, spec values) plus operator| (enum stays unscoped, the 02 spec shows enum class: deviation); rule = flips apply to the stored image first, then clockwise rotation, Rot90/Rot270 swap the drawn width and height, (x, y) is the top-left of the drawn rectangle; SpriteSheet gained trailing field cols (0 = frames stacked as before, >0 = atlas with cols frames per row, row stride cols*w); Canvas::blit now takes a stride and uses one affine index walk (base + du/dv steps) for all flip/rotation combinations, tilemap passes stride = tile_w; new header core/include/pge/sprite.h with Animation{first,count,ticks_per_frame,loop} and inline animFrame(anim, ticks), a pure function of the tick count so every band draws the same frame (not looping holds the last frame; count 0 gives first; ticks_per_frame 0 counts as 1); examples/gfxdemo shows an animated (4-frame atlas), flipped, rotating and right-edge-clipped sprite; tests/test_sprites.cpp = 10 ASCII goldens (flips, all rotations, flip+rotate order, opaque, clipped left/top and right/bottom), an independent reference model (explicit flipX/flipY/rotate-CW image transforms) compared with renderFrame output for 2 transparency modes x 16 flag combos x 9 x 9 positions (partly and fully off screen) x bands 18/7/3/1 (band boundaries cut the 7x5 sprite), atlas frame test, animation helper test. Results: ctest 6/6 passed (version, gfx, bench, core, prims, sprites); mutation checks (flip applied after rotation; rot90 source mapping sy = u) make test_sprites fail; gfxdemo band 16 vs band 240 BMPs byte-identical (cmp) at scale 1 and 2; frame checked by eye (arrow, flipped arrow, 180-degree rotated arrow, clipped sprite at the right edge). Not verified: arm-none-eabi build of the new blit (not run), F429 on-board sprite speed (not measured), Rot sprites are per-pixel affine walk (no per-row fast path; measure in S4.4 if sprites dominate), tile ids still unchecked (no tile count). Session touched 3 new files + 5 edited files, about 330 new lines incl. tests, within the protocol rule 5 cap.
+- 2026-11-15 S4.3: no Key decision K1-K15 changed. Built Camera/clampAxis (world <= view centres the world, floor), parallaxOffset = floor(cam*q8/256) via int64 arithmetic shift, MapLayer + drawLayers (index 0 = back, caller keeps count <= PGE_PARALLAX_LAYERS), Tileset.transparent (index 0 skipped) so upper tile layers work. Input gained axis(i), touching/touchPressed/touchReleased/touchX/touchY (logical coords = raw display coords / PGE_SCALE); Input::update(raw, scale) is public for tests. Mapping tables per platform: host key table in input_sdl.cpp (+ left mouse = touch via pge_host_window_to_display), F429 button table in input_gpio.c + touch via BSP_TS (STMPE811) with landscape transform for PGE_F429_ROT 0/1 [to verify on board]. Deviations: Camera is ints (not Fix); no tile-id range check yet; TS init failure leaves touch disabled but input OK. Results: ctest 8/8 (version gfx bench core prims sprites camera input); mutation checks (clampAxis off-by-one, parallaxOffset truncating division, pressed() using cur only) make tests fail; scroller headless shot viewed (sky, clouds, bricks, ground, HUD); ARM build of all four firmware targets OK incl. sizes. Not verified: everything on the board (touch orientation, REVD calibration, scroller speed), interactive host keyboard/mouse (no input injected in the headless run), scale>1 path of Input touch only unit-tested.
+- 2026-11-15 S4.3 board check: user confirmed on the STM32F429I-DISCO that buttons, stick, touch (pge_f429_input) and the scroller (stick/buttons scroll, touch recentres) all work; touch orientation under PGE_F429_ROT=0 is correct, so the landscape transform is verified for ROT 0 only (ROT 1 untested). Protocol rule 5 cap exceeded this session (about 1,500 new lines incl. tests, 21 files touched, parts A/B/C by three subagents); not split because camera, input and the platform backends form one unit.
 
 ## Open questions
 
@@ -84,6 +86,8 @@ Next: S4.3 (plan/PLAN-S4-mve.md, board needed for the F429 input part). Read set
 - Change-log insert is O(n): measure in S5.1a; upgrade if > 1 ms.
 - DISCO USB-host MSC + FatFs storage backend assumed, not verified (S3).
 - SDL2 install needed before S3.1a window; unit tests for S3.1a can run without it. (SDL2 2.32.10 installed, see docs/dev/toolchain.md.)
+- S4.3 board check: answered 2026-11-15, passed.
+- confirm USE_STM32F429I_DISCOVERY_REVD setting for this board (touch Y looked right to the user, so the default calibration is fine for this board)
 
 ## Feature tracker
 
@@ -92,10 +96,10 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | Feature | Status | Session |
 |---|---|---|
 | S3 Pixel-art graphics | implemented | S4.2a, S4.2b |
-| S3 Tile-based maps | planned | S4.3 |
+| S3 Tile-based maps | implemented (host + F429, board-checked) | S4.3 |
 | S3 Large scrolling worlds | planned | S5.1a |
 | S3 Procedurally generated terrain | planned | S5.1b |
-| S3 Multiple tile layers | planned | S4.3 (draw), S5.1a (store) |
+| S3 Multiple tile layers | implemented (host + F429, board-checked) | S4.3 (draw), S5.1a (store) |
 | S3 Character movement and animation | planned | S4.4 (example), S5.2 |
 | S3 Collision detection | planned | S4.4 (tile), S5.2 (entity) |
 | S3 Physics and gravity | planned | S4.4 (example controller), S5.2 |
@@ -114,12 +118,12 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S5 Text rendering | implemented | S4.2a |
 | S5 Sprites, transparent sprites | implemented | S4.2b |
 | S5 Sprite sheets, animated sprites | implemented | S4.2b |
-| S5 Tilemaps | planned | S4.3 |
-| S5 Multiple rendering layers | planned | S4.3 |
-| S5 Camera movement | planned | S4.3 |
+| S5 Tilemaps | implemented (host + F429, board-checked) | S4.3 |
+| S5 Multiple rendering layers | implemented (host + F429, board-checked) | S4.3 |
+| S5 Camera movement | implemented (host + F429, board-checked) | S4.3 |
 | S5 Camera scaling (integer 1x/2x/3x, K15) | implemented | S4.2a |
 | S5 Free camera zoom | out of scope | - |
-| S5 Parallax scrolling | planned | S4.3 |
+| S5 Parallax scrolling | implemented (host + F429, board-checked) | S4.3 |
 | S5 Palette-based rendering | implemented | S4.2a |
 | S5 Clipping | implemented | S4.2a |
 | S5 Sprite flipping | implemented | S4.2b |
@@ -135,18 +139,18 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S6 Procedural world generation | planned | S5.1b |
 | S6 Collision maps | planned | S4.4 |
 | S6 Interactive tiles | planned | S5.1a |
-| S6 World boundaries | planned | S4.3 (camera clamp), S5.1a |
-| S6 Camera-based rendering | planned | S4.3 |
+| S6 World boundaries | implemented (host + F429, board-checked) | S4.3 (camera clamp), S5.1a |
+| S6 Camera-based rendering | implemented (host + F429, board-checked) | S4.3 |
 | S6 Entity management, object pooling | incomplete: pools implemented (S4.1), entity manager S5.2 | S4.1 (pools), S5.2 |
 | S6 Compressed world storage (run-length) | planned | S5.3a |
 | S6 External storage for worlds | planned | S5.3b |
 | S6 Game code separated from engine | planned | S6.1 (grep check) |
-| S7 GPIO buttons | planned | S4.3 |
-| S7 Joysticks | planned | S4.3 |
-| S7 Gamepads and keypads (as buttons) | planned | S4.3 |
-| S7 Touchscreens | planned | S4.3 (F429) |
+| S7 GPIO buttons | implemented (host + F429, board-checked) | S4.3 |
+| S7 Joysticks | implemented (host + F429, board-checked) | S4.3 |
+| S7 Gamepads and keypads (as buttons) | implemented (host + F429, board-checked) | S4.3 |
+| S7 Touchscreens | implemented (host + F429, board-checked) | S4.3 (F429) |
 | S7 USB HID devices | out of scope for v1 (future port item) | S7.2a (porting guide) |
-| S7 Unified input API | planned | S4.3 |
+| S7 Unified input API | implemented (host + F429, board-checked) | S4.3 |
 | S7 PWM and DAC audio | incomplete: not scheduled | documented in S7.2a; F429 options in 02 section 6 |
 | S7 I2S audio | planned | S5.5 |
 | S7 Sound effects, basic music, multiple channels | planned | S5.5 |

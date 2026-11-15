@@ -19,8 +19,9 @@ inline constexpr SpriteFlags operator|(SpriteFlags a, SpriteFlags b) {
 // frame f at px + f*w*h. cols > 0: an atlas with `cols` frames per row (row stride cols*w), frame f at column
 // f % cols, row f / cols.
 struct SpriteSheet { const uint8_t* px; const Color* palette; uint16_t w, h, frames; bool transparent; uint16_t cols = 0; };
-// Tile t at px + t*tile_w*tile_h; indexed, no transparency. Tile ids are not range-checked (no tile count yet).
-struct Tileset { const uint8_t* px; const Color* palette; uint8_t tile_w, tile_h; };
+// Tile t at px + t*tile_w*tile_h; indexed. With `transparent` pixel index 0 is skipped (layers drawn over others),
+// otherwise every pixel is written. Tile ids are not range-checked (no tile count yet).
+struct Tileset { const uint8_t* px; const Color* palette; uint8_t tile_w, tile_h; bool transparent = false; };
 struct TileLayer { const uint8_t* tiles; uint16_t w, h; const Tileset* set; };
 
 // Glyph (ch - first) is h bytes at rows + (ch - first) * h, one byte per glyph row; bit (w - 1 - x) is pixel x (w <= 8).
@@ -49,7 +50,7 @@ class Canvas {
   void text(const Font& f, int x, int y, const char* s, Color c);  // transparent background, newline starts a line
   uint16_t dropped() const { return drops_; }  // invalid-argument draws in this canvas (saturating)
   void sprite(const SpriteSheet& s, uint16_t frame, int x, int y, SpriteFlags f);
-  // Prototype: integer camera offsets, not the Fix / Camera struct of the 02 spec.
+  // Integer camera offsets (world pixel at the screen's top-left); see camera.h for Camera and parallax layers.
   void tilemap(const TileLayer& l, int cam_x, int cam_y);
 
  private:

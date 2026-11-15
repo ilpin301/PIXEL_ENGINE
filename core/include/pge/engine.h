@@ -31,17 +31,39 @@ enum class Button : uint32_t {
   A = PGE_BTN_A, B = PGE_BTN_B, Start = PGE_BTN_START, Select = PGE_BTN_SELECT
 };
 
-// Buttons only; axes, touch and mapping come in S4.3. Edges are per tick.
+// Buttons, 4 analog axes and one touch point, sampled once per tick; pressed / released are edges against the
+// previous tick. How physical keys, pins, sticks and the mouse map onto buttons / axes / touch is decided by
+// the platform HAL backend (see hal/input.h), not here.
 class Input {
  public:
   bool held(Button b) const { return (cur_ & static_cast<uint32_t>(b)) != 0; }
   bool pressed(Button b) const { return (cur_ & ~prev_ & static_cast<uint32_t>(b)) != 0; }
   bool released(Button b) const { return (prev_ & ~cur_ & static_cast<uint32_t>(b)) != 0; }
+  int axis(unsigned i) const { return i < 4 ? axis_[i] : 0; }  // -32768..32767, 0 for i >= 4
+  bool touching() const { return touch_ != 0; }
+  bool touchPressed() const { return touch_ != 0 && prev_touch_ == 0; }
+  bool touchReleased() const { return touch_ == 0 && prev_touch_ != 0; }
+  // Logical screen coordinates (raw display coordinates / scale). Keep their last value after release, 0 before the
+  // first touch.
+  int touchX() const { return tx_; }
+  int touchY() const { return ty_; }
+
+  // Called by Engine each tick; public so tests can feed it. scale < 1 is treated as 1.
+  void update(const pge_raw_input& raw, int scale = 1) {
+    if (scale < 1) scale = 1;
+    prev_ = cur_;
+    cur_ = raw.buttons & 0xFFu;  // the QUIT bit is the engine's business, never visible to games
+    for (int i = 0; i < 4; i++) axis_[i] = raw.axis[i];
+    prev_touch_ = touch_;
+    touch_ = raw.touch_down != 0;
+    if (touch_) { tx_ = raw.touch_x / scale; ty_ = raw.touch_y / scale; }
+  }
 
  private:
-  friend class Engine;
-  void update(uint32_t raw) { prev_ = cur_; cur_ = raw & 0xFFu; }
   uint32_t cur_ = 0, prev_ = 0;
+  int16_t axis_[4] = {};
+  int tx_ = 0, ty_ = 0;
+  bool touch_ = false, prev_touch_ = false;
 };
 
 class Engine {

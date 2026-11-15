@@ -89,7 +89,7 @@ void Canvas::tilemap(const TileLayer& l, int cam_x, int cam_y) {
     for (int tx = tx0; tx <= tx1; tx++) {
       if (tx < 0 || tx >= l.w) continue;
       uint8_t id = l.tiles[ty * l.w + tx];
-      blit(ts.px + (uint32_t)id * tw * th, ts.palette, tw, th, tw, tx * tw - cam_x, ty * th - cam_y, 0, false);
+      blit(ts.px + (uint32_t)id * tw * th, ts.palette, tw, th, tw, tx * tw - cam_x, ty * th - cam_y, 0, ts.transparent);
     }
   }
 }
