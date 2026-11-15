@@ -1,0 +1,5 @@
+add_executable(pge_empty main.cpp)
+target_link_libraries(pge_empty PRIVATE pge_core pge_platform_host_null)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(pge_empty PRIVATE -Wall -Wextra)
+endif()

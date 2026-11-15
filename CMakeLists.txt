@@ -15,6 +15,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(PGE_PROFILE_DIR ${CMAKE_SOURCE_DIR}/platform/${PGE_PLATFORM})
 add_subdirectory(core)
 
 if(PGE_PLATFORM STREQUAL "stm32f429i_disco")
@@ -28,10 +29,12 @@ else()
   add_subdirectory(platform/host)
   if(SDL2_FOUND)
     add_subdirectory(examples/proto)
+    add_subdirectory(examples/gfxdemo)
   else()
     message(STATUS "SDL2 not found: host window demo skipped")
   endif()
 
+  add_subdirectory(examples/empty)
   add_subdirectory(bench/b1)
 
   if(PGE_BUILD_TESTS)

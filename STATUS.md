@@ -18,9 +18,9 @@
 | S3.2a | plan/PLAN-S3-prototypes.md | done 2026-11-15 (scene confirmed by user on the board, rotated 180 from first try) |
 | S3.2b | plan/PLAN-S3-prototypes.md | done 2026-11-15 (B1 numbers in docs/benchmarks/raw/f429.txt; input and tearing confirmed by user on the board) |
 | S3.4 | plan/PLAN-S3-prototypes.md | done 2026-11-15 (G3 passed) |
-| S4.1 | plan/PLAN-S4-mve.md | todo |
-| S4.2a | plan/PLAN-S4-mve.md | todo |
-| S4.2b | plan/PLAN-S4-mve.md | todo |
+| S4.1 | plan/PLAN-S4-mve.md | done 2026-11-15 |
+| S4.2a | plan/PLAN-S4-mve.md | done 2026-11-15 |
+| S4.2b | plan/PLAN-S4-mve.md | done 2026-11-15 |
 | S4.3 | plan/PLAN-S4-mve.md | todo |
 | S4.4 | plan/PLAN-S4-mve.md | todo |
 | S4.5 | plan/PLAN-S4-mve.md | todo |
@@ -40,7 +40,7 @@
 
 ## Resume point
 
-Next: S4.1 (plan/PLAN-S4-mve.md). Read set: PLAN.md protocol + Key decisions, plan/PLAN-S4-mve.md, STATUS.md, docs/benchmarks/stage3.md summary block. Start in a fresh session: "Run session S4.1 from PLAN.md".
+Next: S4.3 (plan/PLAN-S4-mve.md, board needed for the F429 input part). Read set: PLAN.md protocol + Key decisions, plan/PLAN-S4-mve.md, STATUS.md, core/include/pge/{gfx,config}.h, core/src/gfx/gfx.cpp (tilemap + blit), platform/stm32f429i_disco/input_gpio.c, platform/host input backends, tests/test_sprites.cpp (golden + reference-model style). Start in a fresh session: "Run session S4.3 from PLAN.md".
 
 ## Decision log (append-only)
 
@@ -63,10 +63,14 @@ Next: S4.1 (plan/PLAN-S4-mve.md). Read set: PLAN.md protocol + Key decisions, pl
 - 2026-11-15 S3.2b: no Key decision changed. Built: display variants selectable at runtime (pge_f429_set_opts), portrait-native logical 240x320 with CPU memcpy or DMA2D M2M flush, vsync back buffer (FB1 0xD0040000, frame_end sets LTDC_Layer1->CFBAR + SRCR VBR and waits for the latch; +153,600 B SDRAM), input HAL platform/stm32f429i_disco/input_gpio.c, examples/f429/{b1_main,input_main}.cpp, debug log enlarged to 32,768 B (read offsets via arm-none-eabi-nm, see toolchain.md). Measured (docs/benchmarks/raw/f429.txt, 180 MHz, Release -O2, 30 frames, flush is synchronous): band 16 per frame, A landscape CPU-transpose / B portrait memcpy / C portrait DMA2D: 100 opaque sprites 7.8 / 10.9 / 5.4 ms, tiles8 static 13.6 / 15.3 / 9.8 ms, tiles8 scroll 14.2 / 15.4 / 9.9 ms, flush_only (pre-clear + flush) 4.8 / 7.4 / 1.9 ms. Flush alone per band 320x8/16/32: transposing copy 138/261/507 us; portrait memcpy 162/324/647 us; DMA2D 25/49/97 us (about 6.6x faster than memcpy). DMA2D cannot transpose, so the fast path needs a portrait-native logical screen (R10: landscape stays on the CPU transpose, about 3.9 ms per frame at band 16). DMA2D fill of the whole 240x320 panel 965 us vs CPU 1049 us (SDRAM-bandwidth bound, about 159 MB/s). Band re-run overhead (R1) is small: tiles8 static at 8 / 16 / 32 lines = 13.9 / 13.6 / 13.5 ms (landscape). Full-height band buffer in SDRAM is slower than SRAM bands (landscape, sprites: 15.2 ms at 240 lines in SDRAM vs 7.8 ms at 16 lines in SRAM). Tearing (R2) on LTDC: variant D, back buffer + vsync, frame time is constant 15,306 us (about 65.3 Hz panel refresh), scene fps 65-66, user saw no tear line; the no-vsync path was accepted in S3.2a. Input (user, board): USER button and PC11 both light A, stick works; PC12, PD2, PD5 not tested (may be unwired); PD4 and PB7 are read but unmapped (no free HAL bit). Deviations: 10 files touched in this session (cap 8, protocol rule 5); LCD text print skipped (numbers read through OpenOCD); examples/f429/main.cpp still prints the stale text "no vsync: tearing accepted" even with backbuf=1 (cosmetic).
 - 2026-11-15 S3.4: no Key decision K1-K15 changed. K2 and K3 confirmed by measurement; K4 and K15 unchanged (B1 cannot test them; K15 is measured in S4.2a). Report docs/benchmarks/stage3.md (G3 pending). Findings: (a) F429 B1 worst scene (band 16, SRAM) = 14.2 ms landscape CPU transpose, 15.4 ms portrait memcpy, 9.9 ms portrait DMA2D; panel refresh 15,306 us = 65.3 Hz; (b) DMA2D band copy is 6.6x faster than CPU memcpy and runs at the SDRAM peak (156 vs 160 MB/s), DMA2D fill only 8% faster than CPU fill; (c) R1 band re-run overhead: tiles +1% at 16 lines and +3% at 8 lines over 32; 100 sprites +11% and +35%; (d) full-height band in SDRAM is 1.7x to 2.8x slower than SRAM bands; (e) proposals for G3: default band 8 / 16 / 32 lines for SMALL / MEDIUM / LARGE, F429 default landscape 320x240 + CPU transpose + vsync back buffer with portrait-native + DMA2D as a profile option, first fps targets in stage3.md section 6 (F429 landscape 30 fps design target, ESP32-S3 SPI none before S4.5). Anomaly: portrait CPU memcpy to SDRAM is slower per byte (23.7 MB/s) than the transposing copy (39.2 MB/s), cause not investigated, not re-run. Note for S4.1: panel runs 65.3 Hz, a 60 Hz tick drifts against vsync.
 - 2026-11-15 G3 passed (user: "i accept all Q"): docs/benchmarks/stage3.md section 8 accepted as recommended. K2, K3 (RGB565), K4, K15 confirmed (K15 still measured in S4.2a). F429 default = landscape 320x240 + CPU transpose; vsync back buffer is the F429 default (+153,600 B SDRAM); portrait-native + DMA2D stays a profile option; default band lines SMALL 8 / MEDIUM 16 / LARGE 32; first fps targets as in stage3.md section 6. K1-K15 no longer provisional for stages S3 topics; R10 closed.
+- 2026-11-15 S4.1: no Key decision K1-K15 changed. Built core/include/pge/{error,config,memory,timestep,engine}.h + core/src/base/engine.cpp, platform pge_profile.h for host and F429 (found through PGE_PROFILE_DIR include dir), platform/host/input_null.cpp (in pge_platform_host_null), examples/empty (pge_empty), tests/test_core.cpp. Decisions: (a) tick rate PGE_TICK_HZ default 60, user/profile overridable; (b) overrun policy: Timestep accumulates elapsed us, runs up to PGE_MAX_CATCHUP (default 5) ticks per loop pass, drops the excess whole periods, keeps phase, counts ticks_dropped and tick_overruns in Stats; (c) render at most once per loop pass and only if a tick ran, loop sleeps (pge_hal_time_delay_us) when no tick is due; on the 65.3 Hz F429 panel with vsync back buffer the 60 Hz tick drifts against vsync, accepted, render is not tied to tick; (d) period = 1000000/hz truncated, 60 Hz runs 40 ppm fast (shortcut comment in timestep.h); (e) contradiction init arena: init arena stays open through onCreate and is locked when the first tick starts (K5 holds from the first tick); (f) contradiction pool exhaustion: Pool<T,N>::alloc returns invalid handle 0xFFFF and counts pool_full, never allocates; double free detected, no generation counter (stale reused handle not detected); (g) Error is an unscoped enum in pge/error.h, values Ok=0 and negatives, gfx.h includes it; (h) Stats lives in engine.h with the spec names (tick_us, tick_us_max, frame_us, band_us, band_us_max, flush_us, fps, pool_high[8], pool_full[8]) plus ticks, ticks_dropped, tick_overruns; band_us = sum of onRender time over bands, flush_us = frame_us - band_us (includes pre-clear), renderFrame not instrumented; (i) Input is a minimal button-edge class, axes/touch/mapping are S4.3; (j) docs mismatches found, not edited: 01-overview says LARGE band_lines 16 (G3 accepted 32, code uses 32), SMALL logical 160x128 in 01 vs 160x120 in 02 section 4 (code uses 160x128), PGE_ASSERT/PGE_CHECK from 02 section 5 not implemented yet. Results: ctest 4/4 passed (version, gfx, bench, core); `pge_empty --seconds 3` = 180 ticks in 2999 ms, dropped 0, overruns 0, fps 61, tick_us about 1-11, frame_us about 190 (null display); arm-none-eabi pge_core builds (engine.cpp object text 1228 B, bss 69,632 B = the two static arenas 65,536 + 4,096); F429 firmware and on-board behaviour not built or run. Deviation: session touched 12 new files (about 709 lines incl. tests and example) and 5 edited files, over the protocol rule 5 cap (about 600 lines, 8 files); not split because the parts are one lifecycle unit; recorded here.
+- 2026-11-15 S4.2a: no Key decision K1-K15 changed. Built: Canvas::pixel/line/rect/circle/fillCircle/text + textWidth + dropped(), pge/color.h (rgb, red8/green8/blue8, kPalette16; a palette is a plain `const Color[]`, no Palette class), built-in 5x7 ASCII font kFont5x7 (authored in-repo, rows-per-glyph format, 677 B), integer output scale in renderFrame via RenderConfig{scale, stage, stage_pixels} (display-coordinate flush rects, window origin not implemented, deferred to S5.6), PGE_SCALE + PGE_SCALE_STAGING_BYTES in config.h, Engine scaled display init + stage buffer + Stats::draw_dropped, examples/gfxdemo (pge_gfxdemo, SDL, --scale/--frames/--shot/--band), tests/test_prims.cpp. Decisions: (a) line = integer Bresenham stepping from the first endpoint, no swap, per-pixel clip; coords beyond kMaxCoord 16384 are dropped and counted (shortcut: per-band cost O(length), Liang-Barsky if profiling asks); (b) circle = midpoint; fillCircle half-width = isqrt(r*r + r - dy*dy), outlines lie inside fills for r 0..40; (c) draw_dropped counts only invalid-argument calls (radius < 0, coord > kMaxCoord, null string/font), once per frame (counted only when the band starts at row 0), plain clipping is not a drop; (d) scale staging size = (N*s)*(W*s)*2 B with W = logical width; the 01-overview section 5.3 table and formula understate it (MEDIUM s=2 N=16: 40,960 B not 20,480; LARGE s=3 N=32: 184,320 B); docs not edited; default PGE_SCALE is 1 so no staging RAM unless a game sets PGE_SCALE; (e) Engine scale is compile-time (PGE_SCALE) while the gfxdemo scale is runtime through renderFrame, because core is built once with scale 1; (f) font: 5x7, spacing 1, '\n' supported, chars outside 32..126 draw '?'. Results: ctest 5/5 (version, gfx, bench, core, prims); gfxdemo band 16 vs band 240 BMPs byte-identical (cmp) at scale 1 and 2; scale 1/2/3 frames checked by eye; prims tests = 15 ASCII goldens, clip-vs-crop and band-vs-full property tests, scale s x s repeat check, drop counters, color and textWidth; mutation checks (remove +r in fillCircle, swap line endpoints on band canvas) make tests fail; arm-none-eabi pge_core builds (text: draw.o 1880 B, font5x7.o 677 B, gfx.o 2428 B); engine.cpp compiles with -DPGE_SCALE=2 and fails the static_assert at 4. Not verified: Engine path with PGE_SCALE > 1 only compile-checked, never run; K15 render-vs-flush cost on the F429 not measured (stage3.md deferred it here, now deferred to S4.3/S4.4 benchmark or later); goldens captured from the implementation and checked by eye, not derived independently; a very long text string could overflow the x cursor (unguarded). Deviation: session touched 6 new and 7 edited files with about 1,000 new lines (test_prims.cpp alone 517), over the protocol rule 5 cap (about 600 lines, 8 files); not split because primitives, text, scale and their tests form one unit; recorded here.
+- 2026-11-15 S4.2b: no Key decision K1-K15 changed. Built: SpriteFlags gained Rot90/Rot180/Rot270 (bits 2-3, spec values) plus operator| (enum stays unscoped, the 02 spec shows enum class: deviation); rule = flips apply to the stored image first, then clockwise rotation, Rot90/Rot270 swap the drawn width and height, (x, y) is the top-left of the drawn rectangle; SpriteSheet gained trailing field cols (0 = frames stacked as before, >0 = atlas with cols frames per row, row stride cols*w); Canvas::blit now takes a stride and uses one affine index walk (base + du/dv steps) for all flip/rotation combinations, tilemap passes stride = tile_w; new header core/include/pge/sprite.h with Animation{first,count,ticks_per_frame,loop} and inline animFrame(anim, ticks), a pure function of the tick count so every band draws the same frame (not looping holds the last frame; count 0 gives first; ticks_per_frame 0 counts as 1); examples/gfxdemo shows an animated (4-frame atlas), flipped, rotating and right-edge-clipped sprite; tests/test_sprites.cpp = 10 ASCII goldens (flips, all rotations, flip+rotate order, opaque, clipped left/top and right/bottom), an independent reference model (explicit flipX/flipY/rotate-CW image transforms) compared with renderFrame output for 2 transparency modes x 16 flag combos x 9 x 9 positions (partly and fully off screen) x bands 18/7/3/1 (band boundaries cut the 7x5 sprite), atlas frame test, animation helper test. Results: ctest 6/6 passed (version, gfx, bench, core, prims, sprites); mutation checks (flip applied after rotation; rot90 source mapping sy = u) make test_sprites fail; gfxdemo band 16 vs band 240 BMPs byte-identical (cmp) at scale 1 and 2; frame checked by eye (arrow, flipped arrow, 180-degree rotated arrow, clipped sprite at the right edge). Not verified: arm-none-eabi build of the new blit (not run), F429 on-board sprite speed (not measured), Rot sprites are per-pixel affine walk (no per-row fast path; measure in S4.4 if sprites dominate), tile ids still unchecked (no tile count). Session touched 3 new files + 5 edited files, about 330 new lines incl. tests, within the protocol rule 5 cap.
 
 ## Open questions
 
 - Q2: answered 2026-11-15 (see Decision log).
+- K15 scale cost (expand CPU, SDRAM staging) on the F429 not measured; add to the S4.4 benchmark (docs/benchmarks/stage4.md) if scale is used there.
 - DISCO audio pin: answered in 02 section 6 (confirm on board in S3).
 - ESP32-DOOMGAD final display interface (8080 parallel vs SPI): conflict between docs and breadboard.
 - TE pin routed on the user's SPI ILI9341 module? (check module, S3)
@@ -74,7 +78,8 @@ Next: S4.1 (plan/PLAN-S4-mve.md). Read set: PLAN.md protocol + Key decisions, pl
 - STM32 doc numbers verified via mirrors only - re-check against st.com.
 - R10 portrait panel on DISCO: answered in S3.2b and S3.4 (landscape = CPU transpose, up to 43% slower than portrait + DMA2D but within one refresh). Closed at G3: landscape default.
 - Verify external buttons PC12, PD2, PD5 on the board when wired (input test firmware pge_f429_input).
-- Tick overrun/catch-up policy: decide in S4.1.
+- Tick overrun/catch-up policy: answered in S4.1 (see Decision log).
+- PGE_RAM_FAST/DMA/EXT/ROM map to nothing on host and F429 yet; place arenas/band buffer in CCM or DMA sections when a port needs it (S4.5 at the latest).
 - Fix 16.16 world-size limit (2,047 tiles at 16 px): acceptable for v1? Confirm at G2.
 - Change-log insert is O(n): measure in S5.1a; upgrade if > 1 ms.
 - DISCO USB-host MSC + FatFs storage backend assumed, not verified (S3).
@@ -86,7 +91,7 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 
 | Feature | Status | Session |
 |---|---|---|
-| S3 Pixel-art graphics | planned | S4.2a, S4.2b |
+| S3 Pixel-art graphics | implemented | S4.2a, S4.2b |
 | S3 Tile-based maps | planned | S4.3 |
 | S3 Large scrolling worlds | planned | S5.1a |
 | S3 Procedurally generated terrain | planned | S5.1b |
@@ -104,21 +109,21 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S3 Sound effects and music | planned | S5.5 |
 | S3 Menus, HUD, UI | planned | S5.6 |
 | S3 Save/load | planned | S5.3a |
-| S3 Capability-based feature switching (K14) | planned | S4.1 |
-| S5 Pixels, lines, rectangles, filled rectangles, circles | planned | S4.2a |
-| S5 Text rendering | planned | S4.2a |
-| S5 Sprites, transparent sprites | planned | S4.2b |
-| S5 Sprite sheets, animated sprites | planned | S4.2b |
+| S3 Capability-based feature switching (K14) | implemented (config.h profile constants) | S4.1 |
+| S5 Pixels, lines, rectangles, filled rectangles, circles | implemented | S4.2a |
+| S5 Text rendering | implemented | S4.2a |
+| S5 Sprites, transparent sprites | implemented | S4.2b |
+| S5 Sprite sheets, animated sprites | implemented | S4.2b |
 | S5 Tilemaps | planned | S4.3 |
 | S5 Multiple rendering layers | planned | S4.3 |
 | S5 Camera movement | planned | S4.3 |
-| S5 Camera scaling (integer 1x/2x/3x, K15) | planned | S4.2a |
+| S5 Camera scaling (integer 1x/2x/3x, K15) | implemented | S4.2a |
 | S5 Free camera zoom | out of scope | - |
 | S5 Parallax scrolling | planned | S4.3 |
-| S5 Palette-based rendering | planned | S4.2a |
-| S5 Clipping | planned | S4.2a |
-| S5 Sprite flipping | planned | S4.2b |
-| S5 Sprite rotation in 90 degree steps | planned | S4.2b |
+| S5 Palette-based rendering | implemented | S4.2a |
+| S5 Clipping | implemented | S4.2a |
+| S5 Sprite flipping | implemented | S4.2b |
+| S5 Sprite rotation in 90 degree steps | implemented | S4.2b |
 | S5 Free sprite rotation | out of scope | - |
 | S5 Basic particle effects | planned | S5.2 |
 | S5 Color format evaluation | implemented (research) | S1.3, docs/research/03 |
@@ -132,7 +137,7 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S6 Interactive tiles | planned | S5.1a |
 | S6 World boundaries | planned | S4.3 (camera clamp), S5.1a |
 | S6 Camera-based rendering | planned | S4.3 |
-| S6 Entity management, object pooling | planned | S4.1 (pools), S5.2 |
+| S6 Entity management, object pooling | incomplete: pools implemented (S4.1), entity manager S5.2 | S4.1 (pools), S5.2 |
 | S6 Compressed world storage (run-length) | planned | S5.3a |
 | S6 External storage for worlds | planned | S5.3b |
 | S6 Game code separated from engine | planned | S6.1 (grep check) |

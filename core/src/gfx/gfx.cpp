@@ -1,3 +1,4 @@
+#include <string.h>
 #include "pge/gfx.h"
 #include "pge/hal/display.h"
 
@@ -32,28 +33,48 @@ void Canvas::fillRect(Rect r, Color c) {
 
 void Canvas::clear(Color c) { fillRect(Rect{0, by_, w_, bh_}, c); }
 
-void Canvas::blit(const uint8_t* src, const Color* pal, int sw, int sh, int x, int y, uint8_t flags,
+// Draws src (sw x sh pixels, row stride `stride`): flips first, then a clockwise rotation from flags bits 2-3.
+void Canvas::blit(const uint8_t* src, const Color* pal, int sw, int sh, int stride, int x, int y, uint8_t flags,
                   bool transparent) {
-  Rect r{x, y, sw, sh};
+  const int rot = (flags >> 2) & 3;
+  Rect r{x, y, (rot & 1) ? sh : sw, (rot & 1) ? sw : sh};
   if (!clip(r)) return;
-  for (int dy = r.y; dy < r.y + r.h; dy++) {
-    int sy = dy - y;
+  // Source index of output pixel (u, v), counted from the output's top-left corner. Affine in u and v, so the
+  // loop below steps by constants; the formula is also evaluated one pixel outside, only to get the step.
+  auto at = [&](int u, int v) {
+    int sx, sy;
+    switch (rot) {
+      case 0: sx = u; sy = v; break;
+      case 1: sx = v; sy = sh - 1 - u; break;
+      case 2: sx = sw - 1 - u; sy = sh - 1 - v; break;
+      default: sx = sw - 1 - v; sy = u; break;
+    }
+    if (flags & FlipX) sx = sw - 1 - sx;
     if (flags & FlipY) sy = sh - 1 - sy;
-    const uint8_t* srow = src + sy * sw;
-    Color* drow = buf_ + (dy - by_) * w_;
-    for (int dx = r.x; dx < r.x + r.w; dx++) {
-      int sx = dx - x;
-      if (flags & FlipX) sx = sw - 1 - sx;
-      uint8_t idx = srow[sx];
+    return sy * stride + sx;
+  };
+  const int u0 = r.x - x, v0 = r.y - y;
+  const int base = at(u0, v0), du = at(u0 + 1, v0) - base, dv = at(u0, v0 + 1) - base;
+  for (int j = 0; j < r.h; j++) {
+    Color* drow = buf_ + (r.y + j - by_) * w_ + r.x;
+    int o = base + j * dv;
+    for (int i = 0; i < r.w; i++, o += du) {
+      uint8_t idx = src[o];
       if (transparent && idx == 0) continue;
-      drow[dx] = pal[idx];
+      drow[i] = pal[idx];
     }
   }
 }
 
 void Canvas::sprite(const SpriteSheet& s, uint16_t frame, int x, int y, SpriteFlags f) {
   if (frame >= s.frames) return;
-  blit(s.px + (uint32_t)frame * s.w * s.h, s.palette, s.w, s.h, x, y, f, s.transparent);
+  if (s.cols == 0) {
+    blit(s.px + (uint32_t)frame * s.w * s.h, s.palette, s.w, s.h, s.w, x, y, f, s.transparent);
+    return;
+  }
+  const uint32_t stride = (uint32_t)s.cols * s.w;
+  const uint8_t* src = s.px + (uint32_t)(frame / s.cols) * s.h * stride + (uint32_t)(frame % s.cols) * s.w;
+  blit(src, s.palette, s.w, s.h, (int)stride, x, y, f, s.transparent);
 }
 
 void Canvas::tilemap(const TileLayer& l, int cam_x, int cam_y) {
@@ -68,7 +89,7 @@ void Canvas::tilemap(const TileLayer& l, int cam_x, int cam_y) {
     for (int tx = tx0; tx <= tx1; tx++) {
       if (tx < 0 || tx >= l.w) continue;
       uint8_t id = l.tiles[ty * l.w + tx];
-      blit(ts.px + (uint32_t)id * tw * th, ts.palette, tw, th, tx * tw - cam_x, ty * th - cam_y, 0, false);
+      blit(ts.px + (uint32_t)id * tw * th, ts.palette, tw, th, tw, tx * tw - cam_x, ty * th - cam_y, 0, false);
     }
   }
 }
@@ -78,14 +99,31 @@ int renderFrame(const RenderConfig& cfg, Color* band_buf, uint32_t band_buf_pixe
   uint32_t lines = cfg.band_lines > cfg.logical_h ? cfg.logical_h : cfg.band_lines;
   if (lines == 0 || cfg.logical_w == 0 || !band_buf || lines * cfg.logical_w > band_buf_pixels)
     return InvalidArg;
+  uint32_t s = cfg.scale;
+  if (s < 1 || s > (uint32_t)kMaxScale || cfg.logical_w * s > 0xFFFFu || cfg.logical_h * s > 0xFFFFu)
+    return InvalidArg;
+  if (s > 1 && (!cfg.stage || (uint64_t)lines * s * cfg.logical_w * s > cfg.stage_pixels)) return InvalidArg;
+  uint32_t dw = cfg.logical_w * s;
   pge_hal_display_frame_begin();
   for (uint32_t y = 0; y < cfg.logical_h; y += lines) {
     uint32_t h = cfg.logical_h - y < lines ? cfg.logical_h - y : lines;
     Canvas canvas(band_buf, cfg.logical_w, cfg.logical_h, (int)y, (int)h, seed);
     canvas.clear(cfg.clear_color);
     fn(canvas, ctx);
-    pge_rect r = {0, (uint16_t)y, cfg.logical_w, (uint16_t)h};
-    int err = pge_hal_display_flush(r, band_buf);
+    Color* out = band_buf;
+    if (s > 1) {  // one scaled row, then copies of it
+      out = cfg.stage;
+      Color* d = out;
+      for (uint32_t row = 0; row < h; row++) {
+        const Color* src = band_buf + row * cfg.logical_w;
+        Color* first = d;
+        for (uint32_t x = 0; x < cfg.logical_w; x++)
+          for (uint32_t k = 0; k < s; k++) *d++ = src[x];
+        for (uint32_t k = 1; k < s; k++, d += dw) memcpy(d, first, dw * sizeof(Color));
+      }
+    }
+    pge_rect r = {0, (uint16_t)(y * s), (uint16_t)dw, (uint16_t)(h * s)};
+    int err = pge_hal_display_flush(r, out);
     if (err == 0) err = pge_hal_display_wait();
     if (err != 0) return err;
   }
