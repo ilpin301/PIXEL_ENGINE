@@ -1,0 +1,65 @@
+# B1 benchmark set, platform=host (pge_platform_host_null, no window)
+# TAG: host, not representative (desktop CPU, not an MCU)
+# build_type=Release
+# logical=320x240 RGB565 frames=200 bus_sim=off
+band=8 item=clear frames=200 us_per_frame=8 us_per_band=0 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=flush_only frames=200 us_per_frame=5 us_per_band=0 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=sprites_opaque frames=200 us_per_frame=92 us_per_band=3 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=sprites_transparent frames=200 us_per_frame=91 us_per_band=3 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=tiles8_static frames=200 us_per_frame=113 us_per_band=3 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=tiles16_static frames=200 us_per_frame=110 us_per_band=3 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=tiles8_scroll frames=200 us_per_frame=124 us_per_band=4 bands_per_frame=30 band_buf_bytes=5120
+band=8 item=tiles16_scroll frames=200 us_per_frame=113 us_per_band=3 bands_per_frame=30 band_buf_bytes=5120
+band=16 item=clear frames=200 us_per_frame=8 us_per_band=0 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=flush_only frames=200 us_per_frame=4 us_per_band=0 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_opaque frames=200 us_per_frame=68 us_per_band=4 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_transparent frames=200 us_per_frame=66 us_per_band=4 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_static frames=200 us_per_frame=112 us_per_band=7 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_static frames=200 us_per_frame=104 us_per_band=6 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_scroll frames=200 us_per_frame=118 us_per_band=7 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_scroll frames=200 us_per_frame=108 us_per_band=7 bands_per_frame=15 band_buf_bytes=10240
+band=32 item=clear frames=200 us_per_frame=8 us_per_band=1 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=flush_only frames=200 us_per_frame=4 us_per_band=0 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=sprites_opaque frames=200 us_per_frame=57 us_per_band=7 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=sprites_transparent frames=200 us_per_frame=54 us_per_band=6 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=tiles8_static frames=200 us_per_frame=113 us_per_band=14 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=tiles16_static frames=200 us_per_frame=104 us_per_band=13 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=tiles8_scroll frames=200 us_per_frame=116 us_per_band=14 bands_per_frame=8 band_buf_bytes=20480
+band=32 item=tiles16_scroll frames=200 us_per_frame=107 us_per_band=13 bands_per_frame=8 band_buf_bytes=20480
+band=240 item=clear frames=200 us_per_frame=9 us_per_band=9 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=flush_only frames=200 us_per_frame=4 us_per_band=4 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=sprites_opaque frames=200 us_per_frame=44 us_per_band=44 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=sprites_transparent frames=200 us_per_frame=42 us_per_band=42 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=tiles8_static frames=200 us_per_frame=111 us_per_band=111 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=tiles16_static frames=200 us_per_frame=103 us_per_band=103 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=tiles8_scroll frames=200 us_per_frame=116 us_per_band=116 bands_per_frame=1 band_buf_bytes=153600
+band=240 item=tiles16_scroll frames=200 us_per_frame=106 us_per_band=106 bands_per_frame=1 band_buf_bytes=153600
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)
+
+# B1 benchmark set, platform=host (pge_platform_host_null, no window)
+# TAG: host, not representative (desktop CPU, not an MCU)
+# build_type=Release
+# logical=320x240 RGB565 frames=20 bus_sim=clock_hz=40000000 bits_per_clock=1
+band=16 item=clear frames=20 us_per_frame=30730 us_per_band=2048 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=flush_only frames=20 us_per_frame=30727 us_per_band=2048 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_opaque frames=20 us_per_frame=30791 us_per_band=2052 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_transparent frames=20 us_per_frame=30791 us_per_band=2052 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_static frames=20 us_per_frame=30836 us_per_band=2055 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_static frames=20 us_per_frame=30830 us_per_band=2055 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_scroll frames=20 us_per_frame=30842 us_per_band=2056 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_scroll frames=20 us_per_frame=30831 us_per_band=2055 bands_per_frame=15 band_buf_bytes=10240
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)
+
+# B1 benchmark set, platform=host (pge_platform_host_null, no window)
+# TAG: host, not representative (desktop CPU, not an MCU)
+# build_type=Release
+# logical=320x240 RGB565 frames=10 bus_sim=clock_hz=10000000 bits_per_clock=1
+band=16 item=clear frames=10 us_per_frame=122893 us_per_band=8192 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=flush_only frames=10 us_per_frame=122895 us_per_band=8193 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_opaque frames=10 us_per_frame=122958 us_per_band=8197 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=sprites_transparent frames=10 us_per_frame=122952 us_per_band=8196 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_static frames=10 us_per_frame=123000 us_per_band=8200 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_static frames=10 us_per_frame=122993 us_per_band=8199 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles8_scroll frames=10 us_per_frame=123055 us_per_band=8203 bands_per_frame=15 band_buf_bytes=10240
+band=16 item=tiles16_scroll frames=10 us_per_frame=123034 us_per_band=8202 bands_per_frame=15 band_buf_bytes=10240
+ram: assets_bytes=6144 (band buffers are caller-owned, see band_buf_bytes)

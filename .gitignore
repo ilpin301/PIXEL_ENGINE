@@ -1,0 +1,13 @@
+build*/
+cmake-build-*/
+.idea/
+*.o
+*.elf
+*.bin
+*.hex
+*.map
+*.pdf
+*.wad
+*.apk
+__pycache__/
+.cf-click/

@@ -1,0 +1,5 @@
+add_library(pge_core STATIC src/base/version.cpp src/gfx/gfx.cpp)
+target_include_directories(pge_core PUBLIC include ${CMAKE_CURRENT_SOURCE_DIR}/../hal/include)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(pge_core PRIVATE -fno-exceptions -fno-rtti -Wall -Wextra)
+endif()

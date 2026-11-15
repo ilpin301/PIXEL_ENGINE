@@ -1,0 +1,18 @@
+add_executable(test_version test_version.cpp)
+target_link_libraries(test_version PRIVATE pge_core)
+add_test(NAME version COMMAND test_version)
+
+add_executable(test_gfx test_gfx.cpp)
+target_link_libraries(test_gfx PRIVATE pge_core)
+target_include_directories(test_gfx PRIVATE ${CMAKE_SOURCE_DIR}/examples/proto)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test_gfx PRIVATE -Wall -Wextra)
+endif()
+add_test(NAME gfx COMMAND test_gfx)
+
+add_executable(test_bench test_bench.cpp)
+target_link_libraries(test_bench PRIVATE pge_core pge_b1 pge_platform_host_null)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test_bench PRIVATE -Wall -Wextra)
+endif()
+add_test(NAME bench COMMAND test_bench)

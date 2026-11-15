@@ -1,0 +1,203 @@
+This is only an illustrative example. Improve the API wherever necessary.
+
+The developer experience should include:
+- Simple game initialization.
+- Game lifecycle callbacks.
+- Sprite and tilemap loading.
+- Input access.
+- Drawing commands.
+- Entity management.
+- Collision queries.
+- Resource management.
+- Debugging tools.
+Make sure the API does not hide important hardware limitations or introduce excessive runtime overhead.
+10. Performance and Memory Optimization
+Treat performance as a fundamental design requirement.
+
+For every major subsystem:
+- Estimate RAM consumption.
+- Estimate flash consumption.
+- Estimate CPU overhead.
+- Identify potential bottlenecks.
+- Propose optimization strategies.
+- Explain hardware-specific optimizations.
+Pay particular attention to:
+- SPI display bandwidth.
+- Framebuffer size.
+- DMA transfer overhead.
+- Rendering throughput.
+- Sprite and tilemap processing.
+- Memory fragmentation.
+- Asset decompression.
+- Chunk caching.
+- Frame timing.
+Establish realistic performance targets for different hardware classes.
+
+Do not promise 60 FPS without calculations or measurements.
+
+Use benchmarking to validate performance claims.
+11. Development Environment and Tooling
+Propose a developer workflow that supports:
+- PlatformIO.
+- ESP-IDF.
+- STM32CubeIDE.
+- CMake.
+- GCC/Clang embedded toolchains.
+- VS Code.
+Consider creating a desktop simulation backend so that games can be developed and debugged on a PC before being deployed to microcontrollers.
+
+A desktop backend could use SDL2 or another lightweight framework for:
+- Window management.
+- Input simulation.
+- Rendering.
+- Debugging.
+- Asset testing.
+The desktop implementation must use the same core engine APIs as embedded targets.
+
+Also consider creating:
+- Asset conversion tools.
+- Sprite sheet importers.
+- Tilemap editors or converters.
+- Palette conversion tools.
+- Memory usage reports.
+- Performance profiling tools.
+12. Required Development Workflow
+Do not immediately generate thousands of lines of code.
+
+Develop the project incrementally using the following stages.
+Stage 1 — Research and Feasibility
+- Analyze the reference repositories.
+- Examine relevant existing technologies.
+- Compare target microcontrollers.
+- Identify hardware constraints.
+- Determine realistic game complexity and performance targets.
+Deliverable: Research report and hardware comparison table.
+Stage 2 — Architecture
+- Define the overall architecture.
+- Design module boundaries.
+- Define hardware abstraction interfaces.
+- Select rendering strategies.
+- Design memory management.
+- Establish portability rules.
+Deliverable: Architecture document, module diagram, and key API definitions.
+Stage 3 — Technical Prototypes
+Build small prototypes to validate the most important assumptions:
+- Display rendering.
+- DMA transfers.
+- Sprite drawing.
+- Tilemap rendering.
+- Input processing.
+- Memory usage.
+- Frame timing.
+Deliverable: Prototype implementations and benchmark results.
+Stage 4 — Minimum Viable Engine
+Implement the minimum functionality needed to create a basic 2D game:
+- Platform initialization.
+- Display driver interface.
+- Rendering API.
+- Sprite support.
+- Input system.
+- Game loop.
+- Camera.
+- Basic collision detection.
+Deliverable: A working engine capable of running a simple platformer.
+Stage 5 — Advanced Features
+Gradually introduce:
+- Chunk-based worlds.
+- Tilemap editing/loading.
+- Procedural generation.
+- Physics.
+- Entity management.
+- Animation.
+- Audio.
+- Save/load.
+- Additional rendering optimizations.
+Deliverable: A more complete 2D game engine.
+Stage 6 — Example Game
+Create a small Terraria-inspired sandbox demonstration featuring:
+- A tile-based world.
+- A controllable character.
+- Gravity and collisions.
+- Terrain interaction.
+- Tile destruction and placement.
+- Basic inventory.
+- Camera scrolling.
+- Simple procedural terrain.
+The example should demonstrate actual engine functionality rather than contain game-specific shortcuts that bypass the engine architecture.
+Stage 7 — Documentation and Release
+Prepare:
+- Installation instructions.
+- Hardware setup guides.
+- API documentation.
+- Module documentation.
+- Example projects.
+- Performance benchmarks.
+- Porting guide for new microcontrollers.
+Deliverable: A usable, documented open-source project.
+13. Code Quality and Engineering Requirements
+Follow these rules throughout development:
+1. Produce compilable, logically complete code.
+2. Never present pseudocode as a finished implementation.
+3. Clearly label pseudocode and incomplete components.
+4. Avoid unnecessary dependencies.
+5. Keep hardware-specific code separate from engine logic.
+6. Use consistent naming conventions.
+7. Document public APIs.
+8. Include error handling and initialization checks.
+9. Consider embedded debugging limitations.
+10. Avoid unnecessary heap allocations.
+11. Include unit tests for portable components.
+12. Include hardware integration tests where possible.
+13. Never invent benchmark results.
+14. Explain hardware-specific limitations.
+15. Maintain a coherent project structure and build system.
+When generating code, provide:
+- File paths.
+- Complete file contents.
+- Required dependencies.
+- Build instructions.
+- Hardware configuration.
+- Expected output.
+- Testing instructions.
+When modifying existing files, provide complete updated files or clearly identified patches.
+14. Important Design Philosophy
+The engine should follow these principles:
+- Embedded-first: Design around microcontroller limitations, not desktop assumptions.
+- Portable: Core engine code must not depend on a specific MCU.
+- Modular: Features should be independently configurable.
+- Efficient: Optimize RAM, CPU, flash, and display bandwidth.
+- Extensible: New hardware platforms and rendering backends should be easy to add.
+- Developer-friendly: Creating a simple game should require minimal boilerplate.
+- Scalable: Support both simple arcade games and more ambitious sandbox games.
+- Honest: Never claim a feature is feasible on hardware without considering its actual resource requirements.
+Avoid trying to recreate the entire Terraria game or its full engine. The goal is to create a reusable embedded 2D game engine capable of supporting games with similar fundamental mechanics at an appropriate scale.
+15. First Response Requirements
+For your first response, DO NOT start implementing the entire engine.
+
+Instead, provide:
+1. An analysis of the two reference repositories.
+2. A comparison of ESP32, ESP32-S3, STM32F429, STM32H7, and RP2040/RP2350.
+3. An assessment of what kind of Terraria-inspired game is realistically achievable on each platform.
+4. A recommended rendering architecture.
+5. A proposed memory management strategy.
+6. A modular engine architecture.
+7. A recommended development language and build system.
+8. A list of the biggest technical risks and unknowns.
+9. A prioritized MVP feature list.
+10. A proposed project directory structure.
+Finish with a concrete technical recommendation for the first implementation target and explain why it is the best starting point.
+
+Where hardware specifications or repository details are uncertain, identify the uncertainty rather than guessing.
+16. Collaboration Rules
+Work as a technical partner throughout the project.
+- Make engineering decisions based on measurable constraints.
+- Explain important trade-offs before committing to an architecture.
+- Challenge unrealistic requirements and suggest practical alternatives.
+- Prefer working prototypes over speculative complexity.
+- Keep the architecture consistent as the project evolves.
+- Track implemented, planned, and incomplete features.
+- Do not silently change previously established design decisions.
+- When new information invalidates an earlier decision, explain why and propose a revision.
+If a critical architectural decision depends on missing information, ask focused questions. Otherwise, make reasonable assumptions and document them.
+
+The ultimate goal is to produce a real, maintainable, open-source Pixel Game Engine that developers can use to build 2D pixel-art games on ESP32, STM32, and other resource-constrained microcontrollers
