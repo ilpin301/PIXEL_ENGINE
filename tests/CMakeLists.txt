@@ -204,3 +204,22 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test_audio PRIVATE -Wall -Wextra)
 endif()
 add_test(NAME audio COMMAND test_audio)
+
+add_executable(test_ui test_ui.cpp)
+target_link_libraries(test_ui PRIVATE pge_core)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test_ui PRIVATE -Wall -Wextra)
+endif()
+add_test(NAME ui COMMAND test_ui)
+
+add_executable(test_sandbox test_sandbox.cpp)
+target_link_libraries(test_sandbox PRIVATE pge_core pge_platform_host_null)
+target_include_directories(test_sandbox PRIVATE ${CMAKE_SOURCE_DIR}/examples/sandbox)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test_sandbox PRIVATE -Wall -Wextra)
+endif()
+add_test(NAME sandbox COMMAND test_sandbox)
+
+# The sandbox example may include only public pge/<name>.h headers (S6.1 done-criterion).
+add_test(NAME sandbox_includes COMMAND ${CMAKE_COMMAND} -DPGE_ROOT=${CMAKE_SOURCE_DIR}
+  -P ${CMAKE_SOURCE_DIR}/examples/sandbox/check_includes.cmake)

@@ -39,13 +39,13 @@ How output reaches the engine: it does not. Planning notes are documents only. T
 
 ## 3. Stage 1 - Sprites and tiles
 
-| Tool | Reason |
-|---|---|
+| Tool                           | Reason                                                                                                                                                                                                                            |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Aseprite (lead recommendation) | Proprietary EULA paid editor, one-time $19.99 USD on Steam as of June 2026 (sales as low as $12.99 in Jan 2026); latest stable seen v1.3.17 (Feb 2026) on Wikipedia, developer blog mentions 1.3.18; building from source is free |
-| LibreSprite (free alternative) | Free fork of the last GPLv2 Aseprite; maintenance status not confirmed |
-| Pixelorama (free alternative) | Free open source, built with Godot; sprite-sheet export and activity not confirmed |
-| Lospec palette list | Many 32-colour palettes, e.g. Jehkoba32, Cheerful-32, Vitality 32, Ae-32, Watt32; pick one = [placeholder] |
-| tools/pge_assets.py (exists) | Python 3.14 + Pillow 12.2 are installed; converts PNG to engine blobs |
+| LibreSprite (free alternative) | Free fork of the last GPLv2 Aseprite; maintenance status not confirmed                                                                                                                                                            |
+| Pixelorama (free alternative)  | Free open source, built with Godot; sprite-sheet export and activity not confirmed                                                                                                                                                |
+| Lospec palette list            | Many 32-colour palettes, e.g. Jehkoba32, Cheerful-32, Vitality 32, Ae-32, Watt32; pick one = [placeholder]                                                                                                                        |
+| tools/pge_assets.py (exists)   | Python 3.14 + Pillow 12.2 are installed; converts PNG to engine blobs                                                                                                                                                             |
 
 Shared fixed palette as art convention - Claude's call, change if wrong. It is only a convention in the editor and is not enforced: the converter builds the palette per sheet. Each sheet must stay at or below 256 colours anyway.
 

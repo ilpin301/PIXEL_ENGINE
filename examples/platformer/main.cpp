@@ -1,5 +1,5 @@
-// pge_platformer [--auto] [--ticks N] [--shot out.bmp]: windowed host platformer through Engine + run<G>.
-// Arrows / WASD move, Z or Up jumps. --auto runs the scripted bot, --ticks N quits after N ticks, --shot saves the
+// pge_platformer [--auto] [--overlay] [--ticks N] [--shot out.bmp]: windowed host platformer through Engine + run<G>.
+// Arrows / WASD move, Z or Up jumps. --auto runs the scripted bot, --overlay starts with the debug overlay on (Select toggles), --ticks N quits after N ticks, --shot saves the
 // window contents to a BMP after the loop.
 #include <cstdio>
 #include <cstdlib>
@@ -14,6 +14,7 @@ int main(int argc, char** argv) {
   const char* shot = nullptr;
   for (int i = 1; i < argc; i++) {
     if (!std::strcmp(argv[i], "--auto")) g_game.autoplay = true;
+    else if (!std::strcmp(argv[i], "--overlay")) g_game.overlay = true;
     else if (i + 1 < argc && !std::strcmp(argv[i], "--ticks")) g_game.quit_after = (uint32_t)std::strtoul(argv[++i], nullptr, 10);
     else if (i + 1 < argc && !std::strcmp(argv[i], "--shot")) shot = argv[++i];
   }

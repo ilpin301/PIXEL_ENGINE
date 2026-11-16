@@ -1,0 +1,16 @@
+PGELOG1
+# SANDBOX BENCH backbuf=1 samples=1800
+avg_us tick=430 band=13311 flush=14595 frame=27906
+max_us tick=1362 band=13361 frame=29169
+ticks_dropped=0 tick_overruns=0 draw_dropped=0
+ram data=39376 bss=70524 end=0x2001ad50 estack=0x20030000 stack_hw=1168 of 86704
+arena init hw=58176 cap=65536 failed=0 band=20480 | frame hw=0 cap=4096
+world cache_slots=12 loaded=12 chunks=32x4 change=8/2048
+pools entity hi=7 full=0 cap=32 | pool_high[0..3]=7 0 0 0
+chunkgen n=128 avg_us=757 max_us=1100 PGE_MAX_CHUNK_LOADS_PER_TICK=1
+chunkgen row=0 n=32 avg_us=165 max_us=172
+chunkgen row=1 n=32 avg_us=684 max_us=981
+chunkgen row=2 n=32 avg_us=1091 max_us=1100
+chunkgen row=3 n=32 avg_us=1088 max_us=1098
+# SANDBOX DONE
+

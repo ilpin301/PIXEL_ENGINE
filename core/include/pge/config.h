@@ -77,6 +77,9 @@ static_assert(PGE_PROFILE_SMALL + PGE_PROFILE_MEDIUM + PGE_PROFILE_LARGE == 1, "
 #ifndef PGE_LIGHTING_ENABLED
 #define PGE_LIGHTING_ENABLED 0  // LARGE: optional, only after the S5.6 measurement
 #endif
+#ifndef PGE_DEBUG_OVERLAY
+#define PGE_DEBUG_OVERLAY 1  // compiled out when 0 (drawOverlay becomes an empty function)
+#endif
 #ifndef PGE_PARTICLE_COUNT
 #define PGE_PARTICLE_COUNT PGE_BY_PROFILE(32, 128, 512)
 #endif

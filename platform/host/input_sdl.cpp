@@ -18,7 +18,12 @@ static const struct { SDL_Scancode sc; uint32_t bit; } kKeys[] = {
   {SDL_SCANCODE_BACKSPACE, PGE_BTN_SELECT}, {SDL_SCANCODE_RSHIFT, PGE_BTN_SELECT},
 };
 
+static int g_wasd_aim = 0;
+
 extern "C" {
+
+// 1: W/A/S/D stop being buttons and become the aim stick (raw axes 2 / 3); the arrows keep the buttons and axes 0 / 1.
+void pge_host_input_wasd_aim(int on) { g_wasd_aim = on != 0; }
 
 int pge_hal_input_init(void) { return 0; }
 
@@ -27,13 +32,19 @@ int pge_hal_input_poll(pge_raw_input* out) {
   SDL_PumpEvents();
   const Uint8* k = SDL_GetKeyboardState(nullptr);
   uint32_t b = 0;
-  for (const auto& m : kKeys)
-    if (k[m.sc]) b |= m.bit;
+  for (const auto& m : kKeys) {
+    const bool wasd = m.sc == SDL_SCANCODE_W || m.sc == SDL_SCANCODE_A || m.sc == SDL_SCANCODE_S || m.sc == SDL_SCANCODE_D;
+    if (k[m.sc] && !(g_wasd_aim && wasd)) b |= m.bit;
+  }
   if (k[SDL_SCANCODE_ESCAPE] || pge_host_quit_requested()) b |= PGE_INPUT_QUIT;
   out->buttons = b;
   out->axis[0] = (int16_t)(((b & PGE_BTN_RIGHT) ? 32767 : 0) - ((b & PGE_BTN_LEFT) ? 32767 : 0));
   out->axis[1] = (int16_t)(((b & PGE_BTN_DOWN) ? 32767 : 0) - ((b & PGE_BTN_UP) ? 32767 : 0));
   out->axis[2] = out->axis[3] = 0;
+  if (g_wasd_aim) {
+    out->axis[2] = (int16_t)((k[SDL_SCANCODE_D] ? 32767 : 0) - (k[SDL_SCANCODE_A] ? 32767 : 0));
+    out->axis[3] = (int16_t)((k[SDL_SCANCODE_S] ? 32767 : 0) - (k[SDL_SCANCODE_W] ? 32767 : 0));
+  }
   out->touch_down = 0;
   out->touch_x = out->touch_y = 0;
   int mx, my;

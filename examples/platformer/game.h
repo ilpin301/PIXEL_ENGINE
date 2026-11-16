@@ -7,8 +7,10 @@
 #include "pge/camera.h"
 #include "pge/collision.h"
 #include "pge/color.h"
+#include "pge/debug.h"
 #include "pge/engine.h"
 #include "pge/sprite.h"
+#include "pge/ui.h"
 
 class PlatformerGame {
  public:
@@ -18,6 +20,7 @@ class PlatformerGame {
 
   uint32_t quit_after = 0;  // request quit after this many ticks; 0 = run until the platform quits
   bool autoplay = false;    // ignore the Input and run the scripted bot
+  bool overlay = false;     // debug overlay; Select toggles it (state changes in onTick only)
 
   pge::Error onCreate(pge::Engine& e) {
     eng_ = &e;
@@ -37,6 +40,7 @@ class PlatformerGame {
   }
 
   void onTick(const pge::Input& in) {
+    if (in.pressed(pge::Button::Select)) overlay = !overlay;
     step(autoplay ? bot() : manual(in));
     cam_.centerOn(body_.x + body_.w / 2, body_.y + body_.h / 2);
     frame_ = !ground_ ? 3 : (vx_ > 32 || vx_ < -32) ? pge::animFrame(kWalk, ticks_) : 0;
@@ -54,6 +58,9 @@ class PlatformerGame {
     c.sprite(sheet_, frame_, body_.x - cam_.x, body_.y - cam_.y, face_ < 0 ? FlipX : pge::None);
     c.text(kFont5x7, 3, 3, hud_, rgb(0, 0, 0));
     c.text(kFont5x7, 2, 2, hud_, rgb(255, 255, 255));
+    const ui::Style st{&kFont5x7, 0xFFFF, 0x0000, 0xFFE0, 1};
+    ui::label(c, st, 2, c.height() - 10, tick_);
+    if (overlay && eng_) drawOverlay(c, st, eng_->stats(), kOverlayAll);
   }
 
   const Bench& bench() const { return bench_; }
@@ -222,6 +229,7 @@ class PlatformerGame {
     o = putStr(o, " px  DEATHS ");
     o = putInt(o, static_cast<int>(deaths_));
     *o = 0;
+    pge::ui::formatU32(tick_ + 2, sizeof tick_ - 2, ticks_);
   }
 
   pge::Engine* eng_ = nullptr;
@@ -246,4 +254,5 @@ class PlatformerGame {
   uint32_t ticks_ = 0, deaths_ = 0;
   Bench bench_ = {};
   char hud_[48] = {};
+  char tick_[16] = {'T', ' ', '0'};
 };
