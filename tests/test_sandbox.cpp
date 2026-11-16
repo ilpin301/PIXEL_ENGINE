@@ -296,6 +296,29 @@ static int standUp(SandboxGame& g) {
   return 0;
 }
 
+// One-stick board: Up alone aims above the head (and jumps); Up + B digs there and does not jump.
+static int testDigUp() {
+  CHECK(standUp(g_ai) == 0);
+  SandboxGame& g = g_ai;
+  const pge::Body& pb = *g.entities().body(g.player());
+  const int col = pb.x / 16, surf = (pb.y + pb.h) / 16;
+  Pad pad;
+  pad.tick(g, PGE_BTN_UP | PGE_BTN_B);  // B press edge tick, nothing above: no jump
+  CHECK(onGround(g) && g.entities().motion(g.player())->vy >= 0);
+  pad.tick(g, 0);
+  CHECK(g.world().set(col, surf - 2, pge::Layer::Fg, pge::kGenDirt) == pge::Ok);
+  const int dirt = g.itemCount(pge::kGenDirt);
+  pad.tick(g, PGE_BTN_UP | PGE_BTN_B);
+  CHECK(g.world().get(col, surf - 2, pge::Layer::Fg) == pge::kTileAir && g.itemCount(pge::kGenDirt) == dirt + 1);
+  CHECK(onGround(g) && g.entities().motion(g.player())->vy >= 0);
+  pad.tick(g, 0);
+  const int headRow = pb.y / 16;
+  pad.tick(g, PGE_BTN_UP);
+  CHECK(g.entities().motion(g.player())->vy < 0);
+  CHECK(g.targetY() == headRow - 1 && g.targetX() == col);  // Up alone already aims above the head
+  return 0;
+}
+
 static int testInventory() {
   CHECK(standUp(g_ai) == 0);
   SandboxGame& g = g_ai;
@@ -678,6 +701,7 @@ int main() {
   if (testRender()) return 1;
   if (testPlaceOverlap()) return 1;
   if (testAim()) return 1;
+  if (testDigUp()) return 1;
   if (testPersistence()) return 1;
   if (testSlimes()) return 1;
   if (testInventory()) return 1;

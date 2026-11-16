@@ -190,6 +190,8 @@ class SandboxGame {
   uint8_t slotItem(int i) const { return inv_[i].item; }
   uint8_t slotCount(int i) const { return inv_[i].count; }
   int selected() const { return sel_; }
+  int targetX() const { return tx_; }
+  int targetY() const { return ty_; }
   void selectSlot(int i) { sel_ = static_cast<int8_t>(((i % kSlots) + kSlots) % kSlots); }
   uint8_t held() const { return inv_[sel_].count > 0 ? inv_[sel_].item : 0; }
 
@@ -497,13 +499,13 @@ class SandboxGame {
     pge::Motion& m = *ent_.motion(player_);
     const int tgt = dir * kMaxRun, v = m.vx;
     m.vx = static_cast<int16_t>(v < tgt ? (v + kAccel > tgt ? tgt : v + kAccel) : (v - kAccel < tgt ? tgt : v - kAccel));
-    if ((ent_.meta(player_)->flags & pge::kEntOnGround) && (in.held(Button::A) || in.held(Button::Up))) m.vy = -kJump;
+    if ((ent_.meta(player_)->flags & pge::kEntOnGround) && (in.held(Button::A) || (in.held(Button::Up) && !in.held(Button::B)))) m.vy = -kJump;
   }
 
   static int stick(int v) { return v > 8192 ? 1 : v < -8192 ? -1 : 0; }
 
   // Target tile: the touch / mouse tile while touching; else, from the aim stick (raw axes 2 / 3, or the Down button on
-  // a one-stick board), the tile beside / above / below the body (diagonals combine both); with no aim, the tile in
+  // a one-stick board; Up aims above the head (and jumps unless B is held)), the tile beside / above / below the body (diagonals combine both); with no aim, the tile in
   // front of the player at body mid height.
   void aim(const pge::Input& in, const pge::Body& b) {
     if (in.touching()) {
@@ -512,7 +514,7 @@ class SandboxGame {
     } else {
       const int ax = stick(in.axis(2));
       int ay = stick(in.axis(3));
-      if (ax == 0 && ay == 0 && in.held(pge::Button::Down)) ay = 1;
+      if (ax == 0 && ay == 0) ay = in.held(pge::Button::Down) ? 1 : in.held(pge::Button::Up) ? -1 : 0;  // Down wins if both
       if (ax != 0) face_ = ax;
       const int side = ax != 0 ? ax : (ay == 0 ? face_ : 0);  // 0 = centre column
       tx_ = (b.x + b.w / 2 + side * (b.w / 2 + 8)) >> 4;
