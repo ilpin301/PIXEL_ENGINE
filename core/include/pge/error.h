@@ -15,3 +15,6 @@ enum Error : int {
 };
 
 }  // namespace pge
+
+// Always-on trust-boundary guard: returns `err` from the calling function (no fatal HAL exists yet).
+#define PGE_CHECK(cond, err) do { if (!(cond)) return (err); } while (0)

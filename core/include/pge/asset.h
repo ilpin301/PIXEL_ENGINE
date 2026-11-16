@@ -1,0 +1,33 @@
+#pragma once
+// Asset blob format (docs/architecture/03 section 4.4): 12-byte header + payload, little-endian, written by
+// tools/pge_assets.py. The view functions are zero-copy: the engine structs point into the blob, which must outlive
+// them. Blobs may come from Storage, so everything is validated (Corrupt on any violation).
+#include <stdint.h>
+#include "pge/error.h"
+#include "pge/gfx.h"
+#include "pge/resource.h"
+
+namespace pge {
+
+constexpr uint32_t kAssetMagic = 0x41454750;  // bytes "PGEA"
+constexpr uint8_t kAssetVersion = 1;
+constexpr uint32_t kAssetHeaderSize = 12;  // magic u32, type u8, version u8, reserved u16 (0), payload size u32
+
+struct AssetView { AssetType type; const uint8_t* payload; uint32_t size; };
+
+// nullptr blob -> InvalidArg. Bad magic / version / reserved / type != expect / len < 12 / 12 + size > len -> Corrupt.
+// Trailing bytes after the payload are allowed. Alignment is not checked here.
+Error assetCheck(const void* blob, uint32_t len, AssetType expect, AssetView& out);
+
+// Payload: u16 w, h, frames, cols, ncolors; u8 transparent (0/1), u8 pad (0); ncolors RGB565 colors; 8-bit pixels
+// (cols == 0: w*h*frames bytes stacked; cols > 0: atlas of (cols*w) x (ceil(frames/cols)*h) bytes). The blob must be
+// 2-byte aligned (the palette is used in place), else InvalidArg. Every pixel index must be < ncolors.
+Error assetSprites(const void* blob, uint32_t len, SpriteSheet& out);
+// Same payload with cols == 0 and w, h = tile size in 1..255; `frames` is the tile count (not used by Tileset).
+Error assetTileset(const void* blob, uint32_t len, Tileset& out);
+
+// Payload: u16 w, u16 h, then w*h u8 tile ids (w, h >= 1, size exact).
+struct TilemapView { uint16_t w, h; const uint8_t* tiles; };
+Error assetTilemap(const void* blob, uint32_t len, TilemapView& out);
+
+}  // namespace pge

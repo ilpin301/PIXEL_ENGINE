@@ -165,3 +165,35 @@ foreach(pge_hs_b fatfs littlefs)
   endif()
   add_test(NAME hal_storage_${pge_hs_b} COMMAND ${pge_hs_n})
 endforeach()
+
+add_executable(test_asset test_asset.cpp)
+target_link_libraries(test_asset PRIVATE pge_core)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test_asset PRIVATE -Wall -Wextra)
+endif()
+add_test(NAME asset COMMAND test_asset)
+
+# Cross-language check: the Python tool emits the sample blobs as headers that test_asset compares with its goldens.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+set(pge_have_pil FALSE)
+if(Python3_FOUND)
+  execute_process(COMMAND ${Python3_EXECUTABLE} -c "import PIL" RESULT_VARIABLE pge_pil_rc OUTPUT_QUIET ERROR_QUIET)
+  if(pge_pil_rc EQUAL 0)
+    set(pge_have_pil TRUE)
+  endif()
+endif()
+if(pge_have_pil)
+  add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_sprites.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/pge_assets.py selftest --emit-dir ${CMAKE_CURRENT_BINARY_DIR}/gen
+    DEPENDS ${CMAKE_SOURCE_DIR}/tools/pge_assets.py)
+  add_custom_target(pge_asset_gen DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_sprites.h
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h)
+  add_dependencies(test_asset pge_asset_gen)
+  target_include_directories(test_asset PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen)
+  target_compile_definitions(test_asset PRIVATE PGE_HAVE_GEN)
+  add_test(NAME tools_assets COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/pge_assets.py selftest)
+  add_test(NAME tools_memreport COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/memreport.py --selftest)
+else()
+  message(STATUS "Python3 with Pillow not found: asset tool tests and the cross-language check are skipped")
+endif()
