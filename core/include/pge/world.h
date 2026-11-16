@@ -66,7 +66,13 @@ class World {
   // Flags of the fg tile; out of bounds, unloaded and void tiles report kTileSolid.
   uint32_t tileFlags(int tx, int ty) const;
 
-  // writeChanges / readChanges (03 section 2.1) arrive with the save format in S5.3a.
+  uint16_t chunksW() const { return w_chunks_; }
+  uint16_t chunksH() const { return h_chunks_; }
+  // Sorted change log access, i < changeCount(). Key = (chunk << 16) | (layer << 10) | (ty_local << 5) | tx_local.
+  uint32_t changeKeyAt(uint32_t i) const { return key_[i]; }
+  uint8_t changeTileAt(uint32_t i) const { return tile_[i]; }
+  // Empties the log and frees every cache slot so no chunk keeps stale edits. The caller must call ensureLoaded again.
+  void clearChanges();
 
  private:
   int findSlot(int chunk) const;

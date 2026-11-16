@@ -100,6 +100,13 @@ Error World::set(int tx, int ty, Layer l, uint8_t t) {
   return Ok;
 }
 
+void World::clearChanges() {
+  count_ = 0;
+  for (int i = 0; i < slots_; i++) slot_chunk_[i] = -1;
+  loaded_ = 0;
+  last_hit_ = 0;
+}
+
 void World::load(int slot, int cx, int cy, int chunk) {
   uint8_t* fg = data_ + (size_t)slot * 2 * kChunkTiles;
   uint8_t* wall = fg + kChunkTiles;

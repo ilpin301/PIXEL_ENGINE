@@ -50,6 +50,21 @@ static_assert(PGE_PROFILE_SMALL + PGE_PROFILE_MEDIUM + PGE_PROFILE_LARGE == 1, "
 #ifndef PGE_MAX_CHUNK_LOADS_PER_TICK
 #define PGE_MAX_CHUNK_LOADS_PER_TICK 1  // 03 section 2.2: chunk generations per ensureLoaded call
 #endif
+#ifndef PGE_STORAGE_IO_BYTES
+#define PGE_STORAGE_IO_BYTES PGE_BY_PROFILE(512, 4096, 16384)  // 03 section 4.1: save/load streaming buffer
+#endif
+#ifndef PGE_PATH_MAX
+#define PGE_PATH_MAX 64  // longest save path accepted is PGE_PATH_MAX - 5 characters (room for ".tmp"/".bak")
+#endif
+#ifndef PGE_CONFIG_MAX_KEYS
+#define PGE_CONFIG_MAX_KEYS PGE_BY_PROFILE(8, 16, 32)  // 03 section 4.3: settings table entries
+#endif
+#ifndef PGE_CONFIG_KEY_BYTES
+#define PGE_CONFIG_KEY_BYTES 24  // includes the terminating NUL
+#endif
+#ifndef PGE_CONFIG_VALUE_BYTES
+#define PGE_CONFIG_VALUE_BYTES 32  // includes the terminating NUL
+#endif
 #ifndef PGE_AUDIO_CHANNELS
 #define PGE_AUDIO_CHANNELS PGE_BY_PROFILE(0, 4, 8)
 #endif

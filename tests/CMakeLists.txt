@@ -101,3 +101,67 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test_particles PRIVATE -Wall -Wextra)
 endif()
 add_test(NAME particles COMMAND test_particles)
+
+add_executable(test_settings test_settings.cpp)
+target_link_libraries(test_settings PRIVATE pge_core pge_host_storage)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test_settings PRIVATE -Wall -Wextra)
+endif()
+add_test(NAME settings COMMAND test_settings)
+
+add_executable(test_storage test_storage.cpp)
+target_link_libraries(test_storage PRIVATE pge_core pge_host_storage)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test_storage PRIVATE -Wall -Wextra)
+endif()
+add_test(NAME storage COMMAND test_storage)
+
+# Storage/settings suites rerun on RAM-disk fakes of FatFs and LittleFS (fake_fs.cpp is compiled in, not linked from
+# a library, so its static binder runs; pge_host_storage is NOT linked: it would duplicate pge_hal_storage_*).
+foreach(pge_ds_t storage settings)
+  foreach(pge_ds_b fatfs littlefs)
+    set(pge_ds_n test_${pge_ds_t}_${pge_ds_b})
+    add_executable(${pge_ds_n} ${CMAKE_CURRENT_SOURCE_DIR}/test_${pge_ds_t}.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/fakes/fake_fs.cpp
+      ${CMAKE_SOURCE_DIR}/drivers/storage_${pge_ds_b}/storage_${pge_ds_b}.cpp)
+    target_include_directories(${pge_ds_n} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/fakes
+      ${CMAKE_SOURCE_DIR}/drivers/storage_${pge_ds_b})
+    if(pge_ds_b STREQUAL fatfs)
+      target_compile_definitions(${pge_ds_n} PRIVATE FAKE_BIND_FATFS)
+    else()
+      target_compile_definitions(${pge_ds_n} PRIVATE FAKE_BIND_LFS)
+    endif()
+    target_link_libraries(${pge_ds_n} PRIVATE pge_core pge_host_common)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+      target_compile_options(${pge_ds_n} PRIVATE -Wall -Wextra)
+    endif()
+    add_test(NAME ${pge_ds_t}_${pge_ds_b} COMMAND ${pge_ds_n})
+  endforeach()
+endforeach()
+
+# HAL storage contract test: one source, three backends (host file, FatFs fake, LittleFS fake).
+add_executable(test_hal_storage_host test_hal_storage.cpp)
+target_link_libraries(test_hal_storage_host PRIVATE pge_core pge_host_storage)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test_hal_storage_host PRIVATE -Wall -Wextra)
+endif()
+add_test(NAME hal_storage_host COMMAND test_hal_storage_host)
+
+foreach(pge_hs_b fatfs littlefs)
+  set(pge_hs_n test_hal_storage_${pge_hs_b})
+  add_executable(${pge_hs_n} ${CMAKE_CURRENT_SOURCE_DIR}/test_hal_storage.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/fake_fs.cpp
+    ${CMAKE_SOURCE_DIR}/drivers/storage_${pge_hs_b}/storage_${pge_hs_b}.cpp)
+  target_include_directories(${pge_hs_n} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/fakes
+    ${CMAKE_SOURCE_DIR}/drivers/storage_${pge_hs_b})
+  if(pge_hs_b STREQUAL fatfs)
+    target_compile_definitions(${pge_hs_n} PRIVATE FAKE_BIND_FATFS)
+  else()
+    target_compile_definitions(${pge_hs_n} PRIVATE FAKE_BIND_LFS)
+  endif()
+  target_link_libraries(${pge_hs_n} PRIVATE pge_core pge_host_common)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(${pge_hs_n} PRIVATE -Wall -Wextra)
+  endif()
+  add_test(NAME hal_storage_${pge_hs_b} COMMAND ${pge_hs_n})
+endforeach()
