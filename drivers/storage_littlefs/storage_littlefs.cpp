@@ -53,7 +53,7 @@ int pge_hal_storage_open(const char* path, int mode, pge_file* out) {
 int32_t pge_hal_storage_read(pge_file f, void* buf, uint32_t n) {
   if (!valid(f) || (!buf && n)) return kInvalidArg;
   lfs_ssize_t got = lfs_file_read(g_fs, &g_file[f], buf, (lfs_size_t)n);
-  return got < 0 ? kIo : (int32_t)got;
+  return got < 0 ? (int32_t)kIo : (int32_t)got;
 }
 
 int32_t pge_hal_storage_write(pge_file f, const void* buf, uint32_t n) {
