@@ -17,6 +17,7 @@ extern "C" {
 #define HAL_LTDC_MODULE_ENABLED
 #define HAL_PWR_MODULE_ENABLED
 #define HAL_RCC_MODULE_ENABLED
+#define HAL_SAI_MODULE_ENABLED
 #define HAL_SDRAM_MODULE_ENABLED
 #define HAL_SPI_MODULE_ENABLED
 
@@ -39,6 +40,7 @@ extern "C" {
 #define USE_HAL_DMA2D_REGISTER_CALLBACKS   0U
 #define USE_HAL_I2C_REGISTER_CALLBACKS     0U
 #define USE_HAL_LTDC_REGISTER_CALLBACKS    0U
+#define USE_HAL_SAI_REGISTER_CALLBACKS     0U
 #define USE_HAL_SDRAM_REGISTER_CALLBACKS   0U
 #define USE_HAL_SPI_REGISTER_CALLBACKS     0U
 
@@ -55,6 +57,7 @@ extern "C" {
 #include "stm32f4xx_hal_i2c.h"
 #include "stm32f4xx_hal_ltdc.h"
 #include "stm32f4xx_hal_pwr.h"
+#include "stm32f4xx_hal_sai.h"
 #include "stm32f4xx_hal_spi.h"
 
 #define assert_param(expr) ((void)0U)

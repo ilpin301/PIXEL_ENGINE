@@ -1,4 +1,4 @@
-add_library(pge_core STATIC src/base/engine.cpp src/base/version.cpp src/gfx/gfx.cpp src/gfx/draw.cpp src/gfx/camera.cpp src/gfx/font5x7.cpp src/physics/collision.cpp src/world/world.cpp src/world/worldgen.cpp src/entity/entity.cpp src/entity/particles.cpp src/storage/storage.cpp src/storage/save.cpp src/storage/settings.cpp src/resource/resource.cpp src/resource/asset.cpp)
+add_library(pge_core STATIC src/base/engine.cpp src/base/version.cpp src/gfx/gfx.cpp src/gfx/draw.cpp src/gfx/camera.cpp src/gfx/font5x7.cpp src/physics/collision.cpp src/world/world.cpp src/world/worldgen.cpp src/entity/entity.cpp src/entity/particles.cpp src/storage/storage.cpp src/storage/save.cpp src/storage/settings.cpp src/resource/resource.cpp src/resource/asset.cpp src/audio/audio.cpp)
 target_include_directories(pge_core PUBLIC include ${CMAKE_CURRENT_SOURCE_DIR}/../hal/include ${PGE_PROFILE_DIR})
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(pge_core PRIVATE -fno-exceptions -fno-rtti -Wall -Wextra)

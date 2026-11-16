@@ -8,13 +8,13 @@ if(NOT EXISTS ${HAL}/Src/stm32f4xx_hal.c)
 endif()
 
 set(HAL_MODULES hal hal_adc hal_adc_ex hal_cortex hal_dma hal_dma2d hal_flash hal_flash_ex hal_gpio hal_i2c hal_ltdc hal_ltdc_ex
-                hal_pwr hal_pwr_ex hal_rcc hal_rcc_ex hal_sdram hal_spi ll_fmc)
+                hal_pwr hal_pwr_ex hal_rcc hal_rcc_ex hal_sai hal_sai_ex hal_sdram hal_spi ll_fmc)
 set(HAL_SOURCES)
 foreach(m ${HAL_MODULES})
   list(APPEND HAL_SOURCES ${HAL}/Src/stm32f4xx_${m}.c)
 endforeach()
 
-set(PGE_F429_OWN board.c display_ltdc.c input_gpio.c)
+set(PGE_F429_OWN board.c display_ltdc.c input_gpio.c audio_sai.c)
 add_library(pge_f429_hal STATIC
   ${HAL_SOURCES}
   ${BSP}/stm32f429i_discovery.c
@@ -74,6 +74,10 @@ add_executable(pge_f429_scroller ${CMAKE_SOURCE_DIR}/examples/f429/scroller_main
 target_include_directories(pge_f429_scroller PRIVATE ${CMAKE_SOURCE_DIR}/examples/scroller)
 target_link_libraries(pge_f429_scroller PRIVATE pge_core pge_f429_hal)
 pge_f429_firmware(pge_f429_scroller flash_f429_scroller)
+
+add_executable(pge_f429_audio ${CMAKE_SOURCE_DIR}/examples/f429/audio_main.cpp)
+target_link_libraries(pge_f429_audio PRIVATE pge_core pge_f429_hal)
+pge_f429_firmware(pge_f429_audio flash_f429_audio)
 
 # One main source, two compile-time switches: bench (scripted bot + log summary) and the vsync back buffer.
 function(pge_f429_platformer tgt flash_tgt bench backbuf)

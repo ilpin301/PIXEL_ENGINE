@@ -102,4 +102,9 @@ python tools/pge_assets.py selftest [--emit-dir DIR]     # also run by ctest (to
 python tools/memreport.py build-f429/platform/stm32f429i_disco/pge_f429_platformer.map --elf <same>.elf --core-lib build-f429/core/libpge_core.a
 python tools/memreport.py --selftest                     # ctest: tools_memreport
 ```
-Tiled JSON limits: one tileset, plain `data` list, no flip bits, no base64 / compression, no infinite maps; id = gid - firstgid + 1 (0 = air, 255 reserved). CSV ids are used as authored, negative = 0. memreport counts linked objects only, `.data` in flash and RAM, and cross-checks flash and RAM against `arm-none-eabi-size` (the 8 B `.init_array`/`.fini_array` difference is explained in the OK line).
+Tiled JSON limits: one tileset, plain `data` list, no flip bits, no base64 / compression, no infinite maps; id = gid - firstgid + 1 (0 = air, 255 reserved). CSV ids are used as authored, negative = 0.
+
+## S5.5 audio
+
+- Host demo: `build/examples/audiodemo/pge_audiodemo.exe [--seconds N] [--bench]` (needs SDL; headless smoke test with SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy).
+- F429 firmware: `pge_f429_audio`, flash with `cmake --build build-f429 --target flash_f429_audio`. Board + MAX98357A on PE4 (LRC/FS), PE5 (BCLK), PE6 (DIN). The bench lines `AUDIO ...` and `# AUDIO DONE` go to pge_dbg_log, read as in the F429 section; LED4 on at the end. Flashing replaces the firmware now on the board. memreport counts linked objects only, `.data` in flash and RAM, and cross-checks flash and RAM against `arm-none-eabi-size` (the 8 B `.init_array`/`.fini_array` difference is explained in the OK line).

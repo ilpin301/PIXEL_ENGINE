@@ -68,6 +68,12 @@ static_assert(PGE_PROFILE_SMALL + PGE_PROFILE_MEDIUM + PGE_PROFILE_LARGE == 1, "
 #ifndef PGE_AUDIO_CHANNELS
 #define PGE_AUDIO_CHANNELS PGE_BY_PROFILE(0, 4, 8)
 #endif
+#ifndef PGE_AUDIO_QUEUE
+#define PGE_AUDIO_QUEUE PGE_BY_PROFILE(8, 16, 32)  // game -> mixer command queue entries
+#endif
+#ifndef PGE_AUDIO_MIX_FRAMES
+#define PGE_AUDIO_MIX_FRAMES 128  // accumulator block: frames mixed per pass
+#endif
 #ifndef PGE_LIGHTING_ENABLED
 #define PGE_LIGHTING_ENABLED 0  // LARGE: optional, only after the S5.6 measurement
 #endif
