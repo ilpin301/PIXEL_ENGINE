@@ -94,6 +94,8 @@ class Pool {
 
   T* get(Handle h) { return h < N && next_[h] == kLive ? reinterpret_cast<T*>(mem_ + sizeof(T) * h) : nullptr; }
 
+  const T* get(Handle h) const { return h < N && next_[h] == kLive ? reinterpret_cast<const T*>(mem_ + sizeof(T) * h) : nullptr; }
+
   uint16_t size() const { return size_; }
   uint16_t capacity() const { return N; }
   const PoolCounters& counters() const { return counters_; }

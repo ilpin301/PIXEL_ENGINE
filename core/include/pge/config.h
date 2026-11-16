@@ -60,6 +60,19 @@ static_assert(PGE_PROFILE_SMALL + PGE_PROFILE_MEDIUM + PGE_PROFILE_LARGE == 1, "
 #define PGE_PARTICLE_COUNT PGE_BY_PROFILE(32, 128, 512)
 #endif
 
+#ifndef PGE_ENTITY_COUNT
+#define PGE_ENTITY_COUNT PGE_BY_PROFILE(64, 256, 1024)
+#endif
+#ifndef PGE_EVENT_QUEUE
+#define PGE_EVENT_QUEUE PGE_BY_PROFILE(16, 32, 64)
+#endif
+#ifndef PGE_ENTITY_CELL_PX
+#define PGE_ENTITY_CELL_PX 32  // overlap-grid cell edge in pixels
+#endif
+#ifndef PGE_ENTITY_GRID_CELLS
+#define PGE_ENTITY_GRID_CELLS PGE_BY_PROFILE(42, 120, 168)  // u16 list heads; covers the active rect in cells
+#endif
+
 #ifndef PGE_TICK_HZ
 #define PGE_TICK_HZ 60
 #endif
@@ -100,4 +113,6 @@ static_assert(PGE_TICK_HZ >= 1 && PGE_TICK_HZ <= 1000, "PGE_TICK_HZ must be 1..1
 static_assert(PGE_SCALE >= 1 && PGE_SCALE <= PGE_INTEGER_SCALE_MAX, "PGE_SCALE must be 1..PGE_INTEGER_SCALE_MAX");
 static_assert(PGE_MAX_CATCHUP >= 1, "PGE_MAX_CATCHUP must be >= 1");
 static_assert(PGE_BAND_LINES >= 1, "PGE_BAND_LINES must be >= 1");
+static_assert(PGE_ENTITY_COUNT >= 1 && PGE_ENTITY_COUNT <= 65533, "PGE_ENTITY_COUNT must be 1..65533 (0xFFFF is the sentinel)");
+static_assert(PGE_ENTITY_CELL_PX >= 1, "PGE_ENTITY_CELL_PX must be >= 1");
 static_assert(PGE_LOGICAL_W > 0 && PGE_LOGICAL_H > 0, "logical size must be > 0");

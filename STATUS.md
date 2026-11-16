@@ -24,9 +24,9 @@
 | S4.3 | plan/PLAN-S4-mve.md | done 2026-11-15 (board check passed: user confirmed buttons, stick, touch in pge_f429_input and the scroller on the F429 board) |
 | S4.4 | plan/PLAN-S4-mve.md | done 2026-11-15 (G4 passed: user played the platformer on the F429 board; stick X inverted in the HAL; benchmark in docs/benchmarks/stage4.md) |
 | S4.5 | plan/PLAN-S4-mve.md | deferred by user 2026-11-15 (ESP32-S3 set aside; resume when the user says so; ESP-IDF still missing) |
-| S5.1a | plan/PLAN-S5-advanced.md | todo |
-| S5.1b | plan/PLAN-S5-advanced.md | todo |
-| S5.2 | plan/PLAN-S5-advanced.md | todo |
+| S5.1a | plan/PLAN-S5-advanced.md | done 2026-11-16 |
+| S5.1b | plan/PLAN-S5-advanced.md | done 2026-11-16 |
+| S5.2 | plan/PLAN-S5-advanced.md | done 2026-11-16 (host only) |
 | S5.3a | plan/PLAN-S5-advanced.md | todo |
 | S5.3b | plan/PLAN-S5-advanced.md | todo |
 | S5.4 | plan/PLAN-S5-advanced.md | todo |
@@ -40,7 +40,7 @@
 
 ## Resume point
 
-Next: S5.1a (plan/PLAN-S5-advanced.md, host only). S4.5 is deferred (see decision log); run it later when the user asks. Read set: PLAN.md protocol + Key decisions, plan/PLAN-S5-advanced.md, STATUS.md, docs/architecture/03-world-entity-storage-api.md sections 2-3, core/include/pge/{gfx,camera,collision}.h. Start in a fresh session: "Run session S5.1a from PLAN.md".
+Next: S5.3a Save format, host storage, resources (plan/PLAN-S5-advanced.md, host only). S4.5 stays deferred. Read set: PLAN.md protocol + Key decisions, plan/PLAN-S5-advanced.md, STATUS.md, docs/architecture/03-world-entity-storage-api.md section 4, core/include/pge/{world,memory,error}.h. Start in a fresh session: "Run session S5.3a from PLAN.md".
 
 ## Decision log (append-only)
 
@@ -72,12 +72,15 @@ Next: S5.1a (plan/PLAN-S5-advanced.md, host only). S4.5 is deferred (see decisio
 - 2026-11-15 S4.4 stick fix: during the user's G4 play check the KY-023 stick X axis was reported inverted (right pushed the player left). Fix in platform/stm32f429i_disco/input_gpio.c: the X axis is negated before the RIGHT/LEFT thresholds and out->axis[0] (Y unchanged); this also affects pge_f429_scroller and pge_f429_input (same HAL), whose earlier S4.3 'stick works' check did not verify direction. pge_f429_platformer was rebuilt and reflashed; direction re-check by the user pending. Host tests unaffected (ctest 10/10 before the change; HAL file is ARM only).
 - 2026-11-15 G4 passed (user: "G4 passed"): platformer played on the STM32F429I-DISCO board; K1-K15 unchanged; tearing by eye was part of the check but the user gave no separate detail.
 - 2026-11-15 S4.5 deferred by the user ("put everything related to esp aside for now and continue"): K1 itself is not changed (ESP32-S3 stays the second port and the universality proof), only its timing; consequences: the claim that the engine core needs no change for a second board stays UNPROVEN until S4.5 runs, so the platformer must still run unchanged there; the ESP32-S3 I2S audio backend in S5.5 and the ESP parts of S7.1/S7.2a are deferred or written untested/Tier B-style until S4.5 is done; S5.1a-S5.4, S5.6, S6.1 are host/F429 only and proceed; any core change that later turns out to be a portability defect is logged as such then.
+- 2026-11-16 S5.1a: no Key decision K1-K15 changed. Built core/include/pge/world.h + core/src/world/world.cpp (World: chunk cache with LRU eviction and no write-back, sorted change log as parallel arrays key u32 + tile u8 = 5 B per entry, binary search + memmove insert, bounds, activate hook, flatGen placeholder generator with surface at world tile row 16), World overload of moveAndCollide sharing ONE template implementation with the TileGrid overload (collision.cpp moveImpl), TileFlag gained Climb 0x08 / Activatable 0x10 / Breakable 0x20 / Transparent 0x40, PGE_MAX_CHUNK_LOADS_PER_TICK (default 1) in config.h, tests/test_world.cpp. Decisions: (a) ints not Fix (as collision.h); (b) World::init takes an Arena& plus WorldConfig{cache_slots 0 = PGE_CHUNK_CACHE_COUNT, change_capacity 0 = 4096, tile_px 0 = 16, props required}; (c) chunk lookup = linear scan over slots + last-hit slot (shortcut, upgrade if profiling asks), get() is therefore O(slots) worst case, not the O(1) of 03 section 2.1; (d) ensureLoaded(Rect view_px, max_loads) returns the number of needed chunks still missing, chunks needed by the call are never evicted by it; (e) set() in an unloaded in-bounds chunk only logs the edit (applied at next load), set of 255 is InvalidArg; (f) void and unloaded tiles are solid for collision regardless of props[255]; (g) tick stamp is u32 per ensureLoaded call, wraparound not handled (about 2 years at 60 Hz); (h) World::tilePx() getter added, World overload has no 255 px tile cap; (i) writeChanges/readChanges deferred to S5.3a (need Writer/Reader types), snapshot option of D19 still open. Results: ctest 11/11 passed (adds world); mutation checks (unsorted append in change-log insert; removed LRU stamp pass in ensureLoaded) make test_world fail; world vs TileGrid moveAndCollide equal over 2000 random moves; change-log worst-case insert (4096 front inserts, host Debug) = 1738 us total, about 0.4 us per insert, far under the 1 ms threshold, so the O(n) insert stays; arm-none-eabi-g++ -Os text: world.cpp 1568 B, collision.cpp 1292 B (both overloads). Not verified: on the F429 board (host only by plan), cost of get() scan with 64 slots, chunk load time with a real generator (S5.1b).
+- 2026-11-16 S5.1b: no Key decision K1-K15 changed. Built core/include/pge/worldgen.h + core/src/world/worldgen.cpp (in pge_core) + tests/test_worldgen.cpp. The generation hook is the existing GenFn from S5.1a (no new hook and no config struct: GenFn has no user pointer, so tunables are constants in worldgen.h and the function stays pure). terrainGen: integer math only, noise sampled in world tile coordinates; surface = 3 octaves of 1D value noise (wavelengths 64 / 16 / 4) giving rows 20..59 (kGenSurfaceBase 40, +-20), so a world needs h_chunks >= 4; grass on the surface, 1-2 dirt rows, stone below; caves from depth 8 as a thin band (|n - 128| <= 6) of 2D value noise ((3 x wl 32 + wl 16) / 4); ore = per-tile hash (1/64 from depth 10, deep ore 1/128 from depth 40); wall layer = dirt wall (depth 1-7) / stone wall (depth >= 8), none above the surface and none on the grass row, kept inside caves. Tile ids: fg 1 grass, 2 dirt, 3 stone, 4 ore, 5 deep ore; wall 1 dirt, 2 stone (the flatGen placeholder keeps wall id 3). Public helpers: terrainHeight(tx, seed) (lets a game spawn the player on the surface without loading a chunk) and terrainTile (per-tile reference form). Not done: no bedrock / world floor, no surface-connected cave entrances, ore not clustered, tunnels 2-3 tiles wide; all are tunable constants, revisit in S6.1. Results: ctest 12/12 passed (adds worldgen). Tests: 5 golden FNV-1a checksums at seed 12345 (goldens captured from the implementation, checked by eye on an ASCII dump, not derived independently), garbage-prefilled buffers give identical bytes, chunk bytes equal the per-tile reference for 3 seeds x 16 chunks, height step <= 3 across chunk edges and negative columns, column structure, cave share 5-20% (measured 11-12%), ore / deep ore near 1/64 and 1/128, different seeds differ, through World with 4 cache slots (grass on the surface, a body lands on the surface, dig + place edits survive eviction and reload). Mutation checks on scratch copies (chunk-local x instead of world x; hidden counter state; caves from depth 4; constant dirt depth) make the test fail; a +1 rounding bias in noise1 does not (rarely changes a value, accepted). Measured generation time (host, g++ 13.1 -O2, 1000 chunks each, 2026-11-16, desktop CPU, not representative): chunk row 0 (air) 7 us, row 1 (surface) 57 us, rows 2-3 (underground with caves) 96 us; the Debug test build prints about 18 us / 340 us. arm-none-eabi-g++ 10.3.1 -Os cortex-m4: worldgen.o text 760 B. PGE_MAX_CHUNK_LOADS_PER_TICK stays 1: a host number cannot justify a change; if the F429 is 20-50x slower than the host (assumed, unmeasured) one load costs 2-5 ms against a 16.7 ms tick, so 1 should fit; measured in S6.2. Not verified: on any board, generation inside the full engine loop, cave shapes by play (only an ASCII dump was viewed), tile art and props for the new ids (game data, S6.1). STATUS fix in the same edit: tracker rows for S5.1a work (chunk storage, loading / cache, interactive tiles) said "planned" and now say implemented.
+- 2026-11-16 S5.2: no Key decision K1-K15 changed. Built in two passes (rule 5 split, ctest green between): pass 1 entity pool + tile-sweep physics + uniform grid, pass 2 health + damage events + animation helper + particles. Files: core/include/pge/{entity.h,particles.h}, core/src/entity/{entity.cpp,particles.cpp}, config.h (PGE_ENTITY_COUNT 64/256/1024, PGE_EVENT_QUEUE 16/32/64, PGE_ENTITY_CELL_PX 32, PGE_ENTITY_GRID_CELLS 42/120/168), memory.h (const Pool::get overload), tests test_entities / test_health / test_particles. Deviations from 03 section 3 (all proposals, log only): (a) positions are int pixels in the existing pge::Body {x,y,w,h ints} (no Fix, no new Body); sub-pixel motion = Motion {vx, vy int16 8.8 px/tick; rx, ry u8 remainder}, the game-side 8.8 convention of the platformer; (b) per-entity RAM is 40 B over parallel arrays (Body 16, Motion 6, EntityMeta 6, Health 6, gen 2, grid link 2, free-list link 2), not the 24 B + 6 B of 03 section 8; grid heads 2 B x cells and event ring extra; (c) the event queue and counters are MEMBERS of Entities (isolated tests), not global free functions; Event is 10 B not 8 (padding), PGE_EVENT_QUEUE x 10 B; (d) Stats has no events_dropped field (engine.h untouched); games pass Entities::counters() and Particles::counters() to Engine::trackPool; (e) the game calls Entities::update(world, PhysicsParams) then endTick() itself (run<G> only calls onTick); (f) alive() is false right after despawn(), the slot is freed and its gen bumped in endTick; spawned entities are skipped by update() until the next endTick (kEntFresh), their anim clock also; (g) overlap grid indexes each entity once (top-left cell), queryOverlap widens by the largest indexed body extent; entities outside the last rebuildGrid region are not indexed (internal flag kEntIndexed); (h) bodies in an in-bounds chunk that is not loaded are frozen (no motion, velocity kept), bodies at the world edge still move; (i) applyDamage takes the invulnerability length as an argument (invuln_ticks), health is optional per entity (addHealth), AUTO_REAP reaps hp <= 0 in endTick before the sweep; (j) particles are an 8 B record over Pool<Particle, PGE_PARTICLE_COUNT> with integer px/tick velocity and gravity every gravity_period ticks (not 'pooled entity kind', as 03 section 3.2); particles do not collide. Results: ctest 15/15 passed (adds entities, health, particles); mutation checks make tests fail (drop max-extent widening in queryOverlap, drop fresh skip, invuln countdown off by one, AUTO_REAP after the sweep); queryOverlap equals a brute-force oracle over 300 random layouts; measured on host (Debug, no NDEBUG, desktop CPU, not representative): update() of 256 gravity+collide bodies = about 100 us/tick; arm-none-eabi-g++ 10.3.1 -Os cortex-m4 text: entity.o 2556 B, particles.o 540 B (SMALL/MEDIUM profiles compile too, only compile-checked). Not verified: on the F429 board, tile-lookup cost with chunks in SDRAM (REVIEW-LOG item 15 still open until S6.2), Release timing, behaviour under the SMALL/MEDIUM profiles, int overflow at extreme coordinates (no guard). Session touched 2 new headers, 2 new sources, 3 new tests and 5 edited files across two passes, about 1,500 lines incl. tests (over rule 5 cap, split into two passes).
 
 ## Open questions
 
 - Q2: answered 2026-11-15 (see Decision log).
 - K15 scale cost (expand CPU, SDRAM staging) on the F429 still not measured (S4.4 platformer uses scale 1); decide in S4.5 / S5.6 or by a small bench.
-- World overload of moveAndCollide (TileGrid today) arrives with S5.1a.
+- World overload of moveAndCollide: answered in S5.1a (see Decision log).
 - S4.4 G4: user play check and tearing check by eye on the board (pge_f429_platformer): answered 2026-11-15, passed.
 - DISCO audio pin: answered in 02 section 6 (confirm on board in S3).
 - ESP32-DOOMGAD final display interface (8080 parallel vs SPI): conflict between docs and breadboard.
@@ -89,11 +92,13 @@ Next: S5.1a (plan/PLAN-S5-advanced.md, host only). S4.5 is deferred (see decisio
 - Tick overrun/catch-up policy: answered in S4.1 (see Decision log).
 - PGE_RAM_FAST/DMA/EXT/ROM map to nothing on host and F429 yet; place arenas/band buffer in CCM or DMA sections when a port needs it (S4.5 at the latest).
 - Fix 16.16 world-size limit (2,047 tiles at 16 px): acceptable for v1? Confirm at G2.
-- Change-log insert is O(n): measure in S5.1a; upgrade if > 1 ms.
+- Change-log insert is O(n): measured in S5.1a, 0.4 us per insert at 4096 entries, kept.
+- Chunk generation time on the F429: host -O2 gives 57-96 us per chunk (S5.1b); the board measurement in S6.2 decides PGE_MAX_CHUNK_LOADS_PER_TICK (stays 1 until then).
 - DISCO USB-host MSC + FatFs storage backend assumed, not verified (S3).
 - SDL2 install needed before S3.1a window; unit tests for S3.1a can run without it. (SDL2 2.32.10 installed, see docs/dev/toolchain.md.)
 - S4.3 board check: answered 2026-11-15, passed.
 - confirm USE_STM32F429I_DISCOVERY_REVD setting for this board (touch Y looked right to the user, so the default calibration is fine for this board)
+- Entity tile-sweep CPU on the F429 (chunks in SDRAM): host Debug 100 us/tick for 256 bodies, board measurement in S6.2 (REVIEW-LOG item 15); per-chunk solid-row cache is the fallback.
 
 ## Feature tracker
 
@@ -103,18 +108,18 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 |---|---|---|
 | S3 Pixel-art graphics | implemented | S4.2a, S4.2b |
 | S3 Tile-based maps | implemented (host + F429, board-checked) | S4.3 |
-| S3 Large scrolling worlds | planned | S5.1a |
-| S3 Procedurally generated terrain | planned | S5.1b |
+| S3 Large scrolling worlds | implemented (store + cache + generator, host only) | S5.1a, S5.1b |
+| S3 Procedurally generated terrain | implemented (host only; board timing S6.2) | S5.1b |
 | S3 Multiple tile layers | implemented (host + F429, board-checked) | S4.3 (draw), S5.1a (store) |
-| S3 Character movement and animation | implemented in the example (S4.4); engine S5.2 | S4.4 (example), S5.2 |
-| S3 Collision detection | implemented (tile, host + F429 bench; entity S5.2) | S4.4 (tile), S5.2 (entity) |
-| S3 Physics and gravity | implemented in the example (S4.4); engine helper S5.2 | S4.4 (example controller), S5.2 |
+| S3 Character movement and animation | implemented in the example (S4.4); engine entities + animation state (host only) | S4.4 (example), S5.2 |
+| S3 Collision detection | implemented (tile, host + F429 bench; entity sweep + overlap query, host only) | S4.4 (tile), S5.2 (entity) |
+| S3 Physics and gravity | implemented (example S4.4; engine gravity + sweep S5.2, host only) | S4.4 (example controller), S5.2 |
 | S3 Inventory | planned (basic) | S6.2 |
 | S3 Items and crafting | planned | S6.2 (items = inventory stacks, crafting = example recipe table) |
-| S3 Interactive objects | planned | S5.1a (tile hook), S5.2 |
+| S3 Interactive objects | implemented (tile activation hook S5.1a; entities S5.2; host only) | S5.1a (tile hook), S5.2 |
 | S3 Enemies and basic AI | planned | S6.1 (example-game code; pools from S5.2) |
-| S3 Health and damage | planned | S5.2 (engine component + damage event) |
-| S3 Particle effects | planned | S5.2 |
+| S3 Health and damage | implemented (host only) | S5.2 (engine component + damage event) |
+| S3 Particle effects | implemented (host only) | S5.2 |
 | S3 Lighting and environment effects | planned (optional) | S5.6 |
 | S3 Sound effects and music | planned | S5.5 |
 | S3 Menus, HUD, UI | planned | S5.6 |
@@ -135,19 +140,19 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S5 Sprite flipping | implemented | S4.2b |
 | S5 Sprite rotation in 90 degree steps | implemented | S4.2b |
 | S5 Free sprite rotation | out of scope | - |
-| S5 Basic particle effects | planned | S5.2 |
+| S5 Basic particle effects | implemented (host only) | S5.2 |
 | S5 Color format evaluation | implemented (research) | S1.3, docs/research/03 |
 | S5 Rendering strategy comparison | implemented (research) | S1.3, docs/research/03 |
 | S5 Band renderer, DMA flush, band-skip, windowed flush | band renderer + DMA2D flush implemented (prototype, measured S3.2b/S3.4); band-skip and windowed flush planned | S3.1a, S3.2, S4.5, S5.6 |
-| S6 Chunk-based world storage | planned | S5.1a |
+| S6 Chunk-based world storage | implemented (host only; save format S5.3a) | S5.1a |
 | S6 Tile properties and metadata | flags implemented (TileProps, S4.4); hardness/light used from S5.x | S4.4 (flags) |
-| S6 Chunk loading and unloading, lazy loading, cache | planned | S5.1a |
-| S6 Procedural world generation | planned | S5.1b |
+| S6 Chunk loading and unloading, lazy loading, cache | implemented (host only) | S5.1a |
+| S6 Procedural world generation | implemented (host only; board timing S6.2) | S5.1b |
 | S6 Collision maps | implemented (TileGrid, S4.4) | S4.4 |
-| S6 Interactive tiles | planned | S5.1a |
+| S6 Interactive tiles | implemented (activation hook, host only) | S5.1a |
 | S6 World boundaries | implemented (host + F429, board-checked) | S4.3 (camera clamp), S5.1a |
 | S6 Camera-based rendering | implemented (host + F429, board-checked) | S4.3 |
-| S6 Entity management, object pooling | incomplete: pools implemented (S4.1), entity manager S5.2 | S4.1 (pools), S5.2 |
+| S6 Entity management, object pooling | implemented (host only) | S4.1 (pools), S5.2 |
 | S6 Compressed world storage (run-length) | planned | S5.3a |
 | S6 External storage for worlds | planned | S5.3b |
 | S6 Game code separated from engine | planned | S6.1 (grep check) |
