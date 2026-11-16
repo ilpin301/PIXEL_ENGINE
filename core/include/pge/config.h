@@ -47,6 +47,9 @@ static_assert(PGE_PROFILE_SMALL + PGE_PROFILE_MEDIUM + PGE_PROFILE_LARGE == 1, "
 #ifndef PGE_CHUNK_CACHE_COUNT
 #define PGE_CHUNK_CACHE_COUNT PGE_BY_PROFILE(4, 16, 64)
 #endif
+#ifndef PGE_MAX_CHUNK_LOADS_PER_TICK
+#define PGE_MAX_CHUNK_LOADS_PER_TICK 1  // 03 section 2.2: chunk generations per ensureLoaded call
+#endif
 #ifndef PGE_AUDIO_CHANNELS
 #define PGE_AUDIO_CHANNELS PGE_BY_PROFILE(0, 4, 8)
 #endif

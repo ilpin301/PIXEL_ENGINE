@@ -1,4 +1,5 @@
 #include "pge/collision.h"
+#include "pge/world.h"
 
 namespace pge {
 
@@ -23,13 +24,14 @@ struct Hit {
 
 // Scans every tile the box overlaps. `down` enables one-way tiles, which block only if prev_bottom is at or above
 // the tile's top edge. Scanning the whole overlapped rectangle keeps this simple; boxes are a few tiles at most.
-Hit scan(const TileGrid& g, int x, int y, int w, int h, bool down, int prev_bottom) {
+template <class G>
+Hit scan(const G& g, int x, int y, int w, int h, bool down, int prev_bottom) {
   Hit r{false, 0, 0, 0, 0};
   const int tx0 = fdiv(x, g.tile_w), tx1 = fdiv(x + w - 1, g.tile_w);
   const int ty0 = fdiv(y, g.tile_h), ty1 = fdiv(y + h - 1, g.tile_h);
   for (int ty = ty0; ty <= ty1; ty++) {
     for (int tx = tx0; tx <= tx1; tx++) {
-      const uint16_t f = tileFlags(g, tx, ty);
+      const uint16_t f = g.flags(tx, ty);
       const bool blk = (f & kTileSolid) || (down && (f & kTileOneWay) && prev_bottom <= ty * g.tile_h);
       if (!blk) continue;
       if (!r.blocked) {
@@ -45,11 +47,22 @@ Hit scan(const TileGrid& g, int x, int y, int w, int h, bool down, int prev_bott
   return r;
 }
 
-}  // namespace
+// Accessors: tile size plus flags(tx, ty). One implementation serves TileGrid and World.
+struct GridAcc {
+  const TileGrid& g;
+  int tile_w, tile_h;
+  uint16_t flags(int tx, int ty) const { return tileFlags(g, tx, ty); }
+};
+struct WorldAcc {
+  const World& w;
+  int tile_w, tile_h;
+  uint16_t flags(int tx, int ty) const { return (uint16_t)w.tileFlags(tx, ty); }
+};
 
-MoveResult moveAndCollide(const TileGrid& g, Body& b, int dx, int dy) {
+template <class G>
+MoveResult moveImpl(const G& g, Body& b, int dx, int dy) {
   MoveResult res{false, false, false, 0};
-  if (g.tile_w == 0 || g.tile_h == 0) return res;  // invalid grid: nothing sensible to do
+  if (g.tile_w <= 0 || g.tile_h <= 0) return res;  // invalid grid: nothing sensible to do
 
   // X axis: sub-steps of at most one tile width.
   int rem = dx < 0 ? -dx : dx;
@@ -88,8 +101,18 @@ MoveResult moveAndCollide(const TileGrid& g, Body& b, int dx, int dy) {
   const int tx0 = fdiv(b.x, g.tile_w), tx1 = fdiv(b.x + b.w - 1, g.tile_w);
   const int ty0 = fdiv(b.y, g.tile_h), ty1 = fdiv(b.y + b.h - 1, g.tile_h);
   for (int ty = ty0; ty <= ty1; ty++)
-    for (int tx = tx0; tx <= tx1; tx++) res.touched_flags |= tileFlags(g, tx, ty);
+    for (int tx = tx0; tx <= tx1; tx++) res.touched_flags |= g.flags(tx, ty);
   return res;
+}
+
+}  // namespace
+
+MoveResult moveAndCollide(const TileGrid& g, Body& b, int dx, int dy) {
+  return moveImpl(GridAcc{g, g.tile_w, g.tile_h}, b, dx, dy);
+}
+
+MoveResult moveAndCollide(const World& w, Body& b, int dx, int dy) {
+  return moveImpl(WorldAcc{w, w.tilePx(), w.tilePx()}, b, dx, dy);
 }
 
 }  // namespace pge

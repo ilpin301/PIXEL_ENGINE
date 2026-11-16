@@ -8,6 +8,10 @@ enum TileFlag : uint16_t {
   kTileSolid = 0x01,   // blocks movement from every direction
   kTileOneWay = 0x02,  // blocks only a body falling onto its top edge
   kTileHazard = 0x04,  // never blocks; only reported in MoveResult::touched_flags
+  kTileClimb = 0x08,        // game meaning (ladders); collision ignores it
+  kTileActivatable = 0x10,  // World::activate calls on_activate
+  kTileBreakable = 0x20,    // game meaning
+  kTileTransparent = 0x40,  // game / lighting meaning
 };
 
 // Per-tile-id properties. hardness and light are carried for game code; collision only reads flags.
