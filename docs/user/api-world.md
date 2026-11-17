@@ -1,0 +1,249 @@
+# World, terrain, collision and entities API
+
+> Summary for later sessions
+> - Covers four headers: `pge/world.h`, `pge/worldgen.h`, `pge/collision.h`, `pge/entity.h`.
+> - All identifiers live in namespace `pge`.
+> - These modules are host-tested only and have not been run on a board
+>   (per the STATUS.md tracker lines for world/entities).
+> - `PGE_*` macros named below are not defined in these headers, so their values are not listed.
+
+## pge/collision.h
+
+Tile property flags and tile-sweep collision for axis-aligned boxes. Tile map, body and result types live here;
+`World` and `Entities` build on them.
+
+### Tile flags (`enum TileFlag : uint16_t`)
+
+| Name | Value | Meaning |
+|---|---|---|
+| `kTileSolid` | 0x01 | blocks movement from every direction |
+| `kTileOneWay` | 0x02 | blocks only a body falling onto its top edge |
+| `kTileHazard` | 0x04 | never blocks; only reported in `MoveResult::touched_flags` |
+| `kTileClimb` | 0x08 | game meaning (ladders); collision ignores it |
+| `kTileActivatable` | 0x10 | `World::activate` calls `on_activate` |
+| `kTileBreakable` | 0x20 | game meaning |
+| `kTileTransparent` | 0x40 | game / lighting meaning |
+
+### Types
+
+| Type | Fields | Meaning |
+|---|---|---|
+| `TileProps` | `uint16_t flags; uint8_t hardness; uint8_t light;` | per-tile-id properties; `flags` are `TileFlag` bits; `hardness` and `light` are carried for game code, collision only reads `flags` |
+| `TileGrid` | `const uint8_t* tiles; uint16_t w, h; uint8_t tile_w, tile_h; const TileProps* props;` | read-only tile map; `tiles` is row-major `w*h` tile ids; `w`, `h` in tiles; `tile_w`, `tile_h` in pixels, must be >= 1 (any value, not only powers of two); `props` is a table of 256 entries indexed by tile id |
+| `Body` | `int x, y; int w, h;` | axis-aligned box: top-left pixel position and size in world pixels; plain ints |
+| `MoveResult` | `bool hit_x; bool hit_y; bool on_ground; uint16_t touched_flags;` | outcome of `moveAndCollide` |
+
+`MoveResult`: `hit_x` / `hit_y` = that axis move was stopped by a blocking tile; `on_ground` = a 1 px move down
+would be blocked (solid, or one-way whose top is at/below the box bottom); `touched_flags` = OR of the flags of
+all tiles overlapped by the final box.
+
+### Functions
+
+| Signature | Meaning |
+|---|---|
+| `uint16_t tileFlags(const TileGrid& g, int tx, int ty)` | flags of tile (tx, ty); any tile outside the grid reports `kTileSolid`, so the world boundary is solid in every direction |
+| `MoveResult moveAndCollide(const TileGrid& g, Body& b, int dx, int dy)` | moves `b` by (dx, dy), X axis first, then Y |
+
+`moveAndCollide` behaviour as stated in the header:
+
+- Each axis advances in sub-steps of at most one tile, so nothing tunnels, whatever the move or body size.
+- The first blocked sub-step snaps the box flush against the blocking tile edge, sets `hit_x` / `hit_y` and ends
+  movement on that axis.
+- Moving horizontally or up, only `kTileSolid` blocks.
+- Moving down, `kTileSolid` blocks, and a `kTileOneWay` tile blocks only if the box bottom before the sub-step was
+  at or above the tile's top edge.
+- `kTileHazard` never blocks.
+- Precondition: `b` does not start overlapping a blocking tile. If it does, the call still terminates without
+  out-of-bounds reads, but the snap may push the box back.
+
+## pge/world.h
+
+Chunked tile world: 32x32-tile chunks, two layers (fg, wall), 1 B per tile. A chunk is generator output plus the
+logged edits for it; dropping a chunk from the cache never needs a write. Includes `pge/collision.h`,
+`pge/config.h`, `pge/error.h`, `pge/gfx.h`, `pge/memory.h`.
+
+### Constants and enums
+
+| Name | Value / definition | Meaning |
+|---|---|---|
+| `kChunkSize` | 32 | chunk edge in tiles |
+| `kChunkTiles` | `kChunkSize * kChunkSize` | tiles per chunk (bytes per layer) |
+| `kTileAir` | 0 | |
+| `kTileVoid` | 255 | outside the world or chunk not loaded; always treated as solid by collision |
+| `kFlatSurfaceRow` | 16 | surface row of `flatGen` |
+| `enum class Layer : uint8_t` | `Fg = 0, Wall = 1` | the two tile layers |
+
+### Callback types
+
+| Type | Signature | Meaning |
+|---|---|---|
+| `GenFn` | `void (*)(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed)` | fills fg and wall (`kChunkTiles` bytes each, row-major) for chunk (cx, cy); must be a pure function of its arguments |
+| `ActivateFn` | `void (*)(World& w, int tx, int ty, uint8_t tile, void* user)` | activation callback |
+
+### `struct WorldConfig`
+
+| Field | Meaning |
+|---|---|
+| `uint16_t w_chunks, h_chunks` | world size in chunks; `w_chunks * h_chunks <= 65535` |
+| `uint32_t seed` | |
+| `GenFn gen` | required |
+| `ActivateFn on_activate` | optional |
+| `void* user` | |
+| `const TileProps* props` | required, 256 entries |
+| `uint16_t cache_slots` | 0 = `PGE_CHUNK_CACHE_COUNT` |
+| `uint32_t change_capacity` | 0 = 4096 entries (5 B each) |
+| `int tile_px` | tile size in pixels, >= 1 (0 = 16) |
+
+### `class World`
+
+| Signature | Meaning |
+|---|---|
+| `Error init(const WorldConfig& cfg, Arena& arena)` | allocates chunk cache, slot metadata and change log from the arena; `InvalidArg` on null gen/props, zero size, more than 65535 chunks or `tile_px < 0`; `OutOfMemory` if the arena runs out |
+| `uint8_t get(int tx, int ty, Layer l) const` | tile at (tx, ty); `kTileVoid` if out of bounds or the chunk is not loaded |
+| `Error set(int tx, int ty, Layer l, uint8_t t)` | `InvalidArg` if out of bounds or `t == kTileVoid`; edits in unloaded chunks are only logged and applied on the next load; a repeated set of one cell overwrites its entry; a new entry in a full log gives `OutOfMemory` |
+| `bool inBounds(int tx, int ty) const` | |
+| `uint32_t changeCount() const` | entries in the change log |
+| `uint32_t changeCapacity() const` | |
+| `bool changeLogNearFull() const` | `count * 10 >= capacity * 9` |
+| `int ensureLoaded(Rect view_px, int max_loads = PGE_MAX_CHUNK_LOADS_PER_TICK)` | loads the chunks overlapping `view_px` (pixels, clamped to the world), at most `max_loads` generations per call; chunks the view needs are never evicted by the same call; returns how many needed chunks are still missing |
+| `bool activate(int tx, int ty)` | calls `on_activate` if (tx, ty) is in bounds, its fg tile has `kTileActivatable` and a callback is set |
+| `const TileProps& props(uint8_t t) const` | |
+| `uint32_t seed() const` | |
+| `uint16_t chunksLoaded() const` | |
+| `bool isLoaded(int cx, int cy) const` | |
+| `int tilePx() const` | |
+| `uint32_t tileFlags(int tx, int ty) const` | flags of the fg tile; out of bounds, unloaded and void tiles report `kTileSolid` |
+| `uint16_t chunksW() const` | |
+| `uint16_t chunksH() const` | |
+| `uint32_t changeKeyAt(uint32_t i) const` | sorted change log access, `i < changeCount()`; key = `(chunk << 16) \| (layer << 10) \| (ty_local << 5) \| tx_local` |
+| `uint8_t changeTileAt(uint32_t i) const` | tile stored for entry `i` |
+| `void clearChanges()` | empties the log and frees every cache slot so no chunk keeps stale edits; the caller must call `ensureLoaded` again |
+
+### Free functions
+
+| Signature | Meaning |
+|---|---|
+| `void flatGen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed)` | placeholder generator: world row `kFlatSurfaceRow` is grass (1), rows below dirt (2), above air; wall layer is 3 below the surface row, 0 above; ignores seed |
+| `MoveResult moveAndCollide(const World& w, Body& b, int dx, int dy)` | same semantics as `moveAndCollide(const TileGrid&, ...)` with tile size = `World::tilePx()` (square); unloaded chunks and the world boundary are solid |
+
+## pge/worldgen.h
+
+Default procedural terrain generator. `terrainGen` is a `GenFn`: a pure function of (cx, cy, seed), integer math
+only, all noise sampled in world tile coordinates, so chunk seams match and the same inputs always give the same
+bytes. Includes `pge/world.h`.
+
+World layout stated in the header: surface row in `[kGenSurfaceBase - 20, kGenSurfaceBase + 19]` = rows 20..59, so
+the world needs `h_chunks >= 4` (128 rows) to leave stone, caves and ore below the highest hills. No bedrock: the
+world bottom is simply where `h_chunks` ends.
+
+### Tile ids
+
+| Name | Value | Meaning |
+|---|---|---|
+| `kGenGrass` | 1 | foreground tile written by `terrainGen` |
+| `kGenDirt` | 2 | foreground |
+| `kGenStone` | 3 | foreground |
+| `kGenOre` | 4 | foreground |
+| `kGenDeepOre` | 5 | foreground |
+| `kGenWallDirt` | 1 | wall-layer id written by `terrainGen` (0 = none above the surface) |
+| `kGenWallStone` | 2 | wall-layer id |
+
+Enums: `GenTile : uint8_t` (foreground), `GenWall : uint8_t` (wall). `flatGen` uses 1 grass, 2 dirt, wall id 3.
+
+### Constants
+
+| Name | Value | Meaning |
+|---|---|---|
+| `kGenSurfaceBase` | 40 | mean surface row |
+| `kGenCaveMinDepth` | 8 | caves start this many rows below the surface |
+| `kGenCaveBand` | 6 | cave where `abs(noise - 128) <= band` (noise 0..255) |
+| `kGenOreMinDepth` | 10 | |
+| `kGenDeepOreMinDepth` | 40 | |
+
+### Functions
+
+| Signature | Meaning |
+|---|---|
+| `int terrainHeight(int tx, uint32_t seed)` | surface row (first non-air foreground tile, the grass row) of world column `tx`; same value `terrainGen` uses, so a game can place the player on the surface without loading a chunk |
+| `void terrainTile(int tx, int ty, uint32_t seed, uint8_t* fg, uint8_t* wall)` | reference per-tile form of `terrainGen`: tile (tx, ty) in world coordinates, written to `*fg` and `*wall` |
+| `void terrainGen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed)` | `GenFn`: surface from 3 octaves of 1D value noise (wavelengths 64, 16, 4), 1-2 dirt rows plus grass on top, stone below, caves as a thin band of 2D value noise, ore as a per-tile hash; fills fg and wall (`kChunkTiles` bytes each) |
+
+## pge/entity.h
+
+Entity pool with tile-sweep physics and a uniform-grid overlap index. Per-slot data lives in parallel arrays
+allocated from an `Arena` in `init`; nothing else allocates. Includes `pge/collision.h`, `pge/config.h`,
+`pge/error.h`, `pge/gfx.h`, `pge/memory.h`, `pge/sprite.h`, `pge/world.h`.
+
+### Handles
+
+| Name | Definition | Meaning |
+|---|---|---|
+| `struct EntityId` | `uint16_t index, gen;` | a handle goes stale when its slot is freed (the slot's gen increments on free only) |
+| `kNoEntity` | `EntityId{0xFFFF, 0}` | |
+| `bool isValid(EntityId id)` | `id.index != 0xFFFF` | |
+
+### Per-entity data
+
+| Type | Fields | Meaning |
+|---|---|---|
+| `Motion` | `int16_t vx, vy; uint8_t rx, ry;` | `vx`, `vy` in 8.8 px/tick; `rx`, `ry` are the sub-pixel remainder 0..255 carried between ticks |
+| `EntityMeta` | `uint8_t kind; uint8_t anim; uint16_t flags; uint16_t anim_t;` | `flags` are `EntityFlag` bits |
+| `PhysicsParams` | `int gravity; int max_fall;` | `gravity` in 8.8 per tick^2, >= 0; `max_fall` in 8.8 per tick, >= 0 |
+| `Health` | `int16_t hp, max_hp; uint8_t invuln_ticks; uint8_t flags;` | `invuln_ticks` is counted down by `update()`, also for bodies frozen in unloaded chunks; `flags` are `HealthFlag` |
+| `Event` | `EventType type; EntityId a; int16_t amount; uint8_t aux;` | notification only: `Health::hp` is authoritative; `aux` is the `kind` passed to `applyDamage` |
+
+### Enums
+
+`enum EntityFlag : uint16_t`: low byte holds engine opt-ins (0x04..0x80 free for games); 0x0100..0x0400 are results
+written by `update()`.
+
+| Name | Value | Meaning |
+|---|---|---|
+| `kEntGravity` | 0x01 | |
+| `kEntCollide` | 0x02 | |
+| `kEntOnGround` | 0x0100 | result written by `update()` |
+| `kEntHitX` | 0x0200 | result written by `update()` |
+| `kEntHitY` | 0x0400 | result written by `update()` |
+| `kEntHealth` | 0x1000 | internal: slot has a valid `Health` (`addHealth`) |
+| `kEntIndexed` | 0x2000 | internal: in the grid built by the last `rebuildGrid` |
+| `kEntFresh` | 0x4000 | internal: spawned this tick, `update()` skips it |
+| `kEntDying` | 0x8000 | internal: `despawn()` called, slot freed in `endTick` |
+
+| Enum | Values | Meaning |
+|---|---|---|
+| `enum HealthFlag : uint8_t` | `kHealthAutoReap = 0x01` | `endTick` despawns the entity once `hp <= 0` |
+| `enum class EventType : uint8_t` | `Damage, Death` | event kinds pushed by `applyDamage` |
+
+### Free function `entityFrame`
+
+| Signature | Meaning |
+|---|---|
+| `uint16_t entityFrame(const EntityMeta& m, const Animation* table, uint8_t count)` | frame to draw for `m`: `animFrame(table[m.anim], m.anim_t)`, or 0 for a null table or an anim id >= `count` |
+
+### `class Entities`
+
+| Signature | Meaning |
+|---|---|
+| `Error init(Arena& a, uint16_t capacity = 0)` | capacity 0 = `PGE_ENTITY_COUNT`; `InvalidArg` if capacity > 65533; `OutOfMemory` if the arena runs out |
+| `EntityId spawn(uint8_t kind, int x, int y, uint8_t w, uint8_t h, uint16_t flags = 0)` | `kNoEntity` (and `counters().full` + 1) when the pool is full; game flags only: internal bits are masked off |
+| `void despawn(EntityId id)` | deferred to `endTick`; `alive()` is false at once; stale or repeated ids are ignored |
+| `bool alive(EntityId id) const` | |
+| `Body* body(EntityId id)` | |
+| `Motion* motion(EntityId id)` | |
+| `EntityMeta* meta(EntityId id)` | |
+| `void setAnim(EntityId id, uint8_t anim)` | restarts `anim_t` only when the animation id changes |
+| `bool addHealth(EntityId id, int16_t max_hp, uint8_t flags = 0)` | false if not alive or `max_hp <= 0`; sets `hp = max_hp`, invuln 0 |
+| `Health* health(EntityId id)` | `nullptr` if not alive or no health |
+| `bool applyDamage(EntityId target, int16_t amount, uint8_t kind, uint8_t invuln_ticks = 0)` | false (no change, no event) if the target is not alive, has no `Health`, `hp <= 0`, is invulnerable or `amount <= 0`; else `hp = max(0, hp - amount)`, `invuln_ticks` = the argument, pushes `Damage` (+ `Death` when hp reaches 0), `kind` goes to `aux` |
+| `bool popEvent(Event& out)` | FIFO; false when empty |
+| `uint16_t eventsDropped() const` | oldest events lost to a full queue (saturating) |
+| `uint16_t eventCount() const` | |
+| `template <class F> void forEach(F fn)` | `fn(EntityId, Body&)` for every live, non-dying entity (fresh ones included), ascending slot order |
+| `void update(const World& w, const PhysicsParams& p)` | gravity, sub-pixel motion and tile collision for live, non-dying, non-fresh slots in ascending order; a body overlapping an in-bounds chunk that is not loaded is frozen (velocity kept) |
+| `void endTick()` | despawns `hp <= 0` entities with `kHealthAutoReap`, frees dying slots (gen + 1), clears `kEntFresh` |
+| `void rebuildGrid(Rect active_px)` | indexes every live entity by the cell of its top-left corner, once per tick; entities whose cell lies outside `active_px` (or outside the `PGE_ENTITY_GRID_CELLS` budget) are not indexed |
+| `uint16_t queryOverlap(Rect r, EntityId* out, uint16_t cap) const` | live entities indexed by the last `rebuildGrid` whose `Body` strictly overlaps `r` (touching edges do not count); writes at most `cap` ids; order is deterministic (cell scan order) |
+| `uint16_t size() const` | slots in use, dying ones included until `endTick` |
+| `uint16_t capacity() const` | |
+| `const PoolCounters& counters() const` | |
+| `uint32_t gridClamped() const` | `rebuildGrid` calls that had to shrink the grid |

@@ -1,0 +1,74 @@
+// NOT TESTED IN VS CODE: VS Code is not installed on the dev machine. The command lines were
+// cross-checked against docs/user/install.md and the CMake target names, nothing more.
+// Assumes cmake, ninja, g++ / arm-none-eabi-gcc and openocd are on PATH. On the Windows dev machine
+// apply the PATH line from docs/user/install.md section 1.5 first (and 2.4 for the ARM tasks).
+// PGE_CUBE_DIR must point at STM32CubeF4 (not vendored); the F429 configure task asks for it.
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "PGE: configure host",
+      "type": "shell",
+      "command": "cmake -S . -B build -G Ninja",
+      "problemMatcher": []
+    },
+    {
+      "label": "PGE: build host",
+      "type": "shell",
+      "command": "cmake --build build",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "PGE: test host",
+      "type": "shell",
+      "command": "ctest --test-dir build --output-on-failure",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "PGE: configure F429",
+      "type": "shell",
+      "command": "cmake -S . -B build-f429 -G Ninja -DPGE_PLATFORM=stm32f429i_disco \"-DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake\" -DCMAKE_BUILD_TYPE=Release -DPGE_CUBE_DIR=${input:cubeDir}",
+      "problemMatcher": []
+    },
+    {
+      "label": "PGE: build F429 platformer",
+      "type": "shell",
+      "command": "cmake --build build-f429 --target pge_f429_platformer",
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "PGE: flash F429 platformer",
+      "type": "shell",
+      "command": "cmake --build build-f429 --target flash_f429_platformer",
+      "problemMatcher": []
+    },
+    {
+      "label": "PGE: configure Tier B skeleton",
+      "type": "shell",
+      "command": "cmake -S . -B build-tb-${input:tierb} -G Ninja -DPGE_PLATFORM=${input:tierb} \"-DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake\"",
+      "problemMatcher": []
+    },
+    {
+      "label": "PGE: build Tier B skeleton",
+      "type": "shell",
+      "command": "cmake --build build-tb-${input:tierb}",
+      "dependsOn": ["PGE: configure Tier B skeleton"],
+      "problemMatcher": ["$gcc"]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "cubeDir",
+      "type": "promptString",
+      "description": "Path to the STM32CubeF4 checkout (PGE_CUBE_DIR)"
+    },
+    {
+      "id": "tierb",
+      "type": "pickString",
+      "description": "Tier B platform",
+      "options": ["rp2040", "rp2350", "stm32h7", "stm32f4_generic"]
+    }
+  ]
+}

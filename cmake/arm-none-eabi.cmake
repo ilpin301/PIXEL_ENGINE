@@ -1,4 +1,4 @@
-# Cross toolchain for Cortex-M4F (STM32F429). Use: -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake
+# Cross toolchain for Cortex-M4F (STM32F429) by default; a preset PGE_MCU_FLAGS (tier B) overrides the CPU. Use: -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
@@ -10,7 +10,9 @@ set(CMAKE_OBJCOPY      arm-none-eabi-objcopy)
 set(CMAKE_SIZE         arm-none-eabi-size)
 
 # Same ABI flags for every language, so core/ and the Cube code link together.
-set(PGE_MCU_FLAGS "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard")
+if(NOT DEFINED PGE_MCU_FLAGS)
+  set(PGE_MCU_FLAGS "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard")
+endif()
 set(CMAKE_C_FLAGS_INIT   "${PGE_MCU_FLAGS} -ffunction-sections -fdata-sections")
 set(CMAKE_CXX_FLAGS_INIT "${PGE_MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti -fno-threadsafe-statics")
 set(CMAKE_ASM_FLAGS_INIT "${PGE_MCU_FLAGS} -x assembler-with-cpp")
