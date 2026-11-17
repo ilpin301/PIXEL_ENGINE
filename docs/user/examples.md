@@ -1,7 +1,7 @@
 # Examples guide
 
 > **Summary for later sessions**
-> - Seven host examples in `examples/<name>/`, each a CMake target `pge_<name>` (empty, proto, gfxdemo, scroller, platformer, audiodemo, sandbox; proto's target is `pge_proto_demo`).
+> - Seven host examples in `examples/<name>/`, each a CMake target `pge_<name>` (empty, proto, gfxdemo, scroller, platformer, audiodemo, sandbox; proto's target is `pge_proto_demo`), plus the Coin Catcher tutorial in `examples/tutorial/` (targets `pge_tutorial_step1` .. `pge_tutorial_step5`, walkthrough in `docs/help/`).
 > - Windowed examples link `pge_platform_host` (SDL2). `pge_empty` links `pge_platform_host_null` (headless, no SDL).
 > - F429 firmware exists for scroller, platformer, audiodemo and sandbox (sources in `examples/f429/`).
 > - Sandbox: save/load verified on host only. On the F429 board SAVE and LOAD show NO STORAGE.
@@ -43,6 +43,7 @@ The flash targets use openocd and ST-LINK and need the board attached. Firmware 
 | platformer | `pge_platformer` | `--auto`, `--overlay`, `--ticks`, `--shot` | `pge_f429_platformer`, `pge_f429_platbench`, `pge_f429_platbench_nobb` | move, Z or Up jumps, Select overlay |
 | audiodemo | `pge_audiodemo` | `--seconds`, `--bench` | `pge_f429_audio` | none (plays on start) |
 | sandbox | `pge_sandbox` | `--overlay`, `--seed`, `--ticks`, `--shot`, `--load`, `--save` | `pge_f429_sandbox`, `pge_f429_sandbench` | dig, place, craft menu |
+| tutorial | `pge_tutorial_step1` .. `pge_tutorial_step5` | `--auto`, `--ticks`, `--shot` | none | move, collect coins, Enter restarts (step 5) |
 
 The host exe path for `empty`, `proto`, `gfxdemo` and `sandbox` follows the same `build/examples/<name>/` layout as the examples toolchain.md names explicitly.
 
@@ -151,6 +152,14 @@ The host exe path for `empty`, `proto`, `gfxdemo` and `sandbox` follows the same
   - `pge_f429_sandbench`: autoplay bench, back buffer. Flash: `flash_f429_sandbench`.
   - Chunk cache 12 slots and change log 2048 entries (`SANDBOX_CACHE`, `SANDBOX_CHANGE_CAP`).
   - The bench runs 60 warm-up ticks plus 1800 samples (about 31 s). Wait about 50 s after flashing, then read `pge_dbg_log`. The log ends with `# SANDBOX DONE`, LED4 lights, and it prints RAM figures and chunk generation times.
+
+## tutorial (`pge_tutorial_step1` .. `pge_tutorial_step5`)
+
+- **Shows:** the Coin Catcher game built up in five steps, one complete `examples/tutorial/stepN/game.h` per step. All steps share `examples/tutorial/main.cpp`. The step-by-step walkthrough is in `docs/help/`.
+- **Host targets:** `pge_tutorial_step1` .. `pge_tutorial_step5` (`build/examples/tutorial/`).
+- **Flags:** `--auto` (scripted input), `--ticks N`, `--shot out.bmp`.
+- **Keys:** arrows or WASD move, Enter (Start) restarts after game over in step 5, Esc quits.
+- **F429:** none.
 
 ## Starting your own game
 

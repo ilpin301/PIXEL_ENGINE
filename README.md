@@ -32,6 +32,7 @@ For installing the tools and building for the board, see `docs/user/install.md`.
 
 User guide:
 
+- `docs/help/en.md` - main user help with a step-by-step tutorial
 - `docs/user/install.md` - installing and building
 - `docs/user/hardware.md` - supported boards and wiring
 - `docs/user/modules.md` - engine modules
