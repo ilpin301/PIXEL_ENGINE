@@ -61,7 +61,7 @@ ctest --test-dir build --output-on-failure
 With the SDL2 development package (version 2.32.10 on the dev machine):
 
 ```powershell
-cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER="C:/Program Files/JetBrains/CLion/bin/mingw/bin/g++.exe" -DCMAKE_PREFIX_PATH=C:/Users/il720506/sdk/SDL2-2.32.10/x86_64-w64-mingw32
+cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER="C:/Program Files/JetBrains/CLion/bin/mingw/bin/g++.exe" -DCMAKE_PREFIX_PATH=C:/Users/<user>/sdk/SDL2-2.32.10/x86_64-w64-mingw32
 ```
 
 The post-build step copies `SDL2.dll` next to the demo executable.

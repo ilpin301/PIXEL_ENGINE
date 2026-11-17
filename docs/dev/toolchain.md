@@ -10,7 +10,7 @@ Facts checked 2026-11-15 on the dev machine (Windows 11, Git Bash).
 | OpenOCD | ok | 0.12.0 (2023-01-14) | C:/ProgramData/chocolatey/bin | - |
 | git | ok | 2.45.1.windows.1 | /mingw64/bin/git | - |
 | Python | ok | 3.14.4 | C:/Python314 | - |
-| SDL2 (dev package) | ok (mingw dev package) | 2.32.10 | C:/Users/il720506/sdk/SDL2-2.32.10 | see SDL2 section |
+| SDL2 (dev package) | ok (mingw dev package) | 2.32.10 | C:/Users/<user>/sdk/SDL2-2.32.10 | see SDL2 section |
 | ESP-IDF | MISSING | - | - | needed from S4.5 only; Espressif ESP-IDF Tools Installer |
 | STM32CubeF4 | not needed now | - | - | submodule of reference repo il721/STM32F429I-DISCO; S3.2 decides how to obtain it |
 
@@ -31,9 +31,9 @@ mingw/bin must be on PATH when tests run (runtime DLLs).
 - GCC 10.3.1 is old. Check on 2026-11-15: `arm-none-eabi-g++ -std=c++17 -fno-exceptions -fno-rtti -c` compiled a test with a generic lambda and `if constexpr` without errors. Re-check with real code when S3.2 starts.
 
 ## SDL2 (ok, 2.32.10)
-Installed at C:/Users/il720506/sdk/SDL2-2.32.10 (SDL2-devel mingw package); SDL2.dll is in `x86_64-w64-mingw32/bin`. Configure with the prefix (the demo exe gets SDL2.dll copied next to it post-build):
+Installed at C:/Users/<user>/sdk/SDL2-2.32.10 (SDL2-devel mingw package); SDL2.dll is in `x86_64-w64-mingw32/bin`. Configure with the prefix (the demo exe gets SDL2.dll copied next to it post-build):
 ```
-cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER="C:/Program Files/JetBrains/CLion/bin/mingw/bin/g++.exe" -DCMAKE_PREFIX_PATH=C:/Users/il720506/sdk/SDL2-2.32.10/x86_64-w64-mingw32
+cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER="C:/Program Files/JetBrains/CLion/bin/mingw/bin/g++.exe" -DCMAKE_PREFIX_PATH=C:/Users/<user>/sdk/SDL2-2.32.10/x86_64-w64-mingw32
 ```
 Without the prefix, `find_package(SDL2 CONFIG QUIET)` fails, the log says "SDL2 not found: host window demo skipped", and the unit tests still build and pass.
 
