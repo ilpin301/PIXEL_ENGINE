@@ -2,7 +2,18 @@
 
 All notable changes to Pixel Game Engine are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Status words come from the STATUS.md feature tracker: "host only" = built and tested on the development PC, nothing run on a board; "board-checked" = the user confirmed it on the STM32F429I-DISCO; "compile-only" = it builds, nothing ran; "incomplete" and "out of scope" as in the tracker. This file states no performance numbers; measured numbers with their conditions are in `docs/benchmarks/`.
 
-## [0.1.0] - 2026-11-17 (prepared; git tag not created yet)
+## [0.1.1] - 2026-11-17
+
+Documentation release; no engine behaviour change. `pge_version()` returns "0.1.1".
+
+### Added
+- User help in English, German and Russian: `docs/help/en.md` (main), `docs/help/de.md`, `docs/help/ru.md`, with 4 SVG diagrams and 9 host screenshots in `docs/help/img/`.
+- Step-by-step tutorial "Coin Catcher": five host targets `pge_tutorial_step1` .. `pge_tutorial_step5` in `examples/tutorial/` (host only; checked with scripted `--auto` runs, not played by keyboard).
+
+### Fixed
+- `docs/user/api-core.md` version table showed 0.0.1.
+
+## [0.1.0] - 2026-11-17
 
 First feature-complete preview. Version constants in `core/include/pge/version.h`, `pge_version()` returns "0.1.0".
 

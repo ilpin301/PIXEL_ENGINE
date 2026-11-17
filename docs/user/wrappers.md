@@ -5,7 +5,7 @@
 > - PlatformIO: native (host) env only, verified 2026-11-17. STM32F429I-DISCO and ESP32-S3 are not provided through PlatformIO.
 > - STM32CubeIDE: manual import facts only, untested (not installed on the dev machine).
 > - VS Code: `.vscode/tasks.json` with 8 tasks, untested (VS Code not installed).
-> - Release: version 0.1.0, git tag `v0.1.0` NOT created yet; GitHub publishing only on the user's explicit go.
+> - Release: version 0.1.1; tags `v0.1.0` and `v0.1.1` exist and are published on GitHub.
 
 Commands and paths that are not repeated here are in `install.md` and `hardware.md`.
 
@@ -118,12 +118,13 @@ Status: untested in VS Code (not installed).
 
 ## 4. Release checklist
 
-Status: v0.1.0 prepared; the git tag is not created.
+Status: the current version 0.1.1 is tagged (`v0.1.1`). The checklist below is for the next release.
 
-- [ ] Version is 0.1.0: `core/include/pge/version.h` (`PGE_VERSION_MAJOR 0`, `MINOR 1`, `PATCH 0`); `pge_version()` returns "0.1.0".
-- [ ] `../../CHANGELOG.md` has the 0.1.0 entry (marked "prepared; git tag not created yet"). Update that heading when the tag exists.
+- [ ] Version constants updated and equal: `core/include/pge/version.h`, `core/src/base/version.cpp` (`pge_version()`), `tests/test_version.cpp`.
+- [ ] `../../CHANGELOG.md` has the entry for the new version.
 - [ ] `../../THIRD_PARTY_NOTICES.md` is present and read before redistributing firmware (the F429 build needs the user's own STM32CubeF4 checkout).
 - [ ] Host tests pass: `ctest --test-dir build --output-on-failure`.
-- [ ] The user commits the release state. Nothing is committed for it yet.
-- [ ] Tag after that commit: `git tag -a v0.1.0 -m "<message>"`. The tag `v0.1.0` is NOT created yet; create it only after the user commits.
-- [ ] Publishing to GitHub (push, tag push, release) only on the user's explicit go.
+- [ ] Commit the release state.
+- [ ] Tag after that commit: `git tag -a vX.Y.Z -m "<message>"`.
+- [ ] Push the commit and the tag.
+- [ ] GitHub release only on the user's explicit go.

@@ -2,7 +2,7 @@ English | [Deutsch](de.md) | [Русский](ru.md)
 
 # Pixel Game Engine (PGE): user help
 
-This is the main user guide for Pixel Game Engine (PGE) version 0.1.0. It explains what the engine is, how to build and run it, how the engine works, and how to write a small game step by step. For the full API reference, follow the links to the files in `docs/user/`.
+This is the main user guide for Pixel Game Engine (PGE) version 0.1.1. It explains what the engine is, how to build and run it, how the engine works, and how to write a small game step by step. For the full API reference, follow the links to the files in `docs/user/`.
 
 ## Contents
 
@@ -39,7 +39,7 @@ The same game code can run on the desktop (the "host") and on a microcontroller 
 
 ### Status and limits
 
-PGE 0.1.0 is a preview. These points come from `README.md` and the feature tracker in `STATUS.md`:
+PGE 0.1.1 is a preview. These points come from `README.md` and the feature tracker in `STATUS.md`:
 
 - Measured Tier A targets: the host (SDL2) and the STM32F429I-DISCO board.
 - ESP32-S3 is deferred (session S4.5). Its I2S audio is deferred with it.

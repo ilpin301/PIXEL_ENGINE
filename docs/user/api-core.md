@@ -187,7 +187,7 @@ Version macros and version string accessor. Global names (not in `namespace pge`
 | Name | Meaning |
 |---|---|
 | `PGE_VERSION_MAJOR` | 0 |
-| `PGE_VERSION_MINOR` | 0 |
+| `PGE_VERSION_MINOR` | 1 |
 | `PGE_VERSION_PATCH` | 1 |
 | `const char* pge_version()` | |
 

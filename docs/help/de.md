@@ -2,7 +2,7 @@
 
 # Pixel Game Engine (PGE): Benutzerhandbuch
 
-Dies ist das Haupthandbuch für die Pixel Game Engine (PGE) in Version 0.1.0. Es erklärt, was die Engine ist, wie Sie sie bauen und starten, wie sie arbeitet und wie Sie Schritt für Schritt ein kleines Spiel schreiben. Die vollständige API-Referenz finden Sie über die Links zu den Dateien in `docs/user/`.
+Dies ist das Haupthandbuch für die Pixel Game Engine (PGE) in Version 0.1.1. Es erklärt, was die Engine ist, wie Sie sie bauen und starten, wie sie arbeitet und wie Sie Schritt für Schritt ein kleines Spiel schreiben. Die vollständige API-Referenz finden Sie über die Links zu den Dateien in `docs/user/`.
 
 ## Inhalt
 
@@ -39,7 +39,7 @@ Derselbe Spielcode läuft auf dem Desktop (dem „Host“) und auf einem Mikroco
 
 ### Status und Grenzen
 
-PGE 0.1.0 ist eine Vorabversion. Die folgenden Punkte stammen aus `README.md` und dem Feature-Tracker in `STATUS.md`:
+PGE 0.1.1 ist eine Vorabversion. Die folgenden Punkte stammen aus `README.md` und dem Feature-Tracker in `STATUS.md`:
 
 - Gemessene Tier-A-Ziele: der Host (SDL2) und das Board STM32F429I-DISCO.
 - ESP32-S3 ist zurückgestellt (Sitzung S4.5). Das I2S-Audio ist damit ebenfalls zurückgestellt.
