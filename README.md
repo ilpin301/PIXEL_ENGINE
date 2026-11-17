@@ -61,7 +61,6 @@ Development:
 
 Project:
 
-- `PLAN.md` - goal, sessions and key decisions (K1-K15)
 - `STATUS.md` - session table, resume point, decision log and feature tracker
 
 ## License

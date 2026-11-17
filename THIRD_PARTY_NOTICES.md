@@ -27,7 +27,7 @@ A HAL configuration header based on ST's Cube template `stm32f4xx_hal_conf_templ
 
 - The 5x7 font glyphs in `core/src/gfx/font5x7.cpp` were drawn for this engine (comment in that file). They are not copied from another font.
 - `tests/fakes/ff.h`, `tests/fakes/lfs.h` and `tests/fakes/fake_fs.cpp` are test fakes written for this repository. They imitate a small API subset; no FatFs or LittleFS source is copied.
-- Nothing is copied from the reference repository's `DOOM/` tree (GPLv2). This is a project rule (PLAN.md, K13).
+- Nothing is copied from the reference repository's `DOOM/` tree (GPLv2). This is a project rule (K13).
 
 ## 2. Not bundled, but compiled and linked into the STM32F429I-DISCO firmware
 

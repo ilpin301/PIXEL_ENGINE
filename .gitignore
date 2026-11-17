@@ -12,3 +12,7 @@ cmake-build-*/
 __pycache__/
 .cf-click/
 .pio/
+PLAN.md
+PLAN-REVIEW-LOG.md
+plan/
+prompt_part*.txt
