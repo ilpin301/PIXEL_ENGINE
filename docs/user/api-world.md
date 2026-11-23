@@ -173,6 +173,34 @@ Enums: `GenTile : uint8_t` (foreground), `GenWall : uint8_t` (wall). `flatGen` u
 | `void terrainTile(int tx, int ty, uint32_t seed, uint8_t* fg, uint8_t* wall)` | reference per-tile form of `terrainGen`: tile (tx, ty) in world coordinates, written to `*fg` and `*wall` |
 | `void terrainGen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed)` | `GenFn`: surface from 3 octaves of 1D value noise (wavelengths 64, 16, 4), 1-2 dirt rows plus grass on top, stone below, caves as a thin band of 2D value noise, ore as a per-tile hash; fills fg and wall (`kChunkTiles` bytes each) |
 
+### Round worlds (planets and asteroids)
+
+A disc in a square grid of chunks, as a pure integer function of (tile coords, seed) with the same hash/noise helpers and tile ids as `terrainGen` (no new tile ids). Host tested only; generation cost on the F429 is not measured.
+
+| Name | Value | Meaning |
+|---|---|---|
+| `RoundSpec` | `int chunks; int radius;` | grid is `chunks` x `chunks` chunks (`chunks * 32` tiles per side); `radius` = disc radius in tiles |
+| `kPlanetSpec` | `{4, 60}` | 128 x 128 tiles |
+| `kAsteroid1Spec` | `{1, 14}` | 32 x 32 tiles |
+| `kAsteroid2Spec` | `{2, 29}` | 64 x 64 tiles |
+
+| Signature | Meaning |
+|---|---|
+| `void roundTile(const RoundSpec& s, int tx, int ty, uint32_t seed, uint8_t* fg, uint8_t* wall)` | reference per-tile form: tile (tx, ty) in world coordinates, written to `*fg` and `*wall` |
+| `void roundGen(const RoundSpec& s, uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed)` | fills chunk (cx, cy) of the round world `s` (`kChunkTiles` bytes each, row-major); equals `roundTile` |
+| `void planetGen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed)`, same signature for `asteroid1Gen` and `asteroid2Gen` | `GenFn` wrappers: `roundGen` with `kPlanetSpec`, `kAsteroid1Spec`, `kAsteroid2Spec` |
+| `GravityDir roundGravity(int x, int y, int cx, int cy)` | gravity toward the centre (cx, cy) for a point (x, y); the four numbers share any one unit |
+| `GravityDir roundTileGravity(const RoundSpec& s, int tx, int ty)` | `roundGravity` for tile (tx, ty) of the grid of `s`, with tile centres in doubled units (`2 * t + 1`) against the grid centre (`chunks * 32`) |
+
+Rules for round worlds:
+
+- Disc: a tile is inside when its doubled-centre distance squared to the grid centre is <= `(2 * radius)^2`. A tile outside the disc or outside the grid is air (0) in both layers, even when `radius` is too large for the grid.
+- Foreground by depth below the rim: grass, 1-2 dirt (patchy by direction), stone, `kGenOre` from depth `radius / 6` and `kGenDeepOre` from depth `2 * radius / 3` in zones that depend on direction and depth. For `kPlanetSpec` these depths (10 and 40) equal `kGenOreMinDepth` and `kGenDeepOreMinDepth`.
+- Wall layer: `kGenWallDirt` for depth < 8, then `kGenWallStone`.
+- Gravity points toward the centre: right of it gives `Left`, below it gives `Up`. The larger axis offset wins; an exact diagonal tie goes to the vertical axis, and the centre itself gives `Down`.
+- `GenFn` has no context argument, so each wrapper has its size baked in. A game with another size calls `roundGen` with its own `RoundSpec` from its own `GenFn`.
+- Shortcuts (noted in the header): perfectly round surface (no hills), no caves, no core tile id (the innermost layer is stone or ore).
+
 ## pge/entity.h
 
 Entity pool with tile-sweep physics and a uniform-grid overlap index. Per-slot data lives in parallel arrays

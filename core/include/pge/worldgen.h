@@ -6,6 +6,7 @@
 // h_chunks >= 4 (128 rows) to leave stone, caves and ore below the highest hills. No bedrock: the world bottom is
 // simply where h_chunks ends.
 #include <stdint.h>
+#include "pge/collision.h"
 #include "pge/world.h"
 
 namespace pge {
@@ -31,5 +32,45 @@ void terrainTile(int tx, int ty, uint32_t seed, uint8_t* fg, uint8_t* wall);
 // GenFn: surface from 3 octaves of 1D value noise (wavelengths 64, 16, 4), 1-2 dirt rows plus grass on top, stone
 // below, caves as a thin band of 2D value noise, ore as a per-tile hash. Fills fg and wall (kChunkTiles bytes each).
 void terrainGen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed);
+
+// ---- Round world (S8.5): a disc (planet / asteroid) in a square grid of chunks ----
+// Pure integer function of (tile coords, seed), same hash/noise helpers and tile ids as terrainGen; no game names.
+// A tile outside the grid or outside the disc (so every chunk outside the grid) comes out as air (0) in both layers.
+// shortcut: perfectly round surface (no hills); upgrade if the example looks dull.
+// shortcut: no caves; upgrade if the example looks dull.
+// shortcut: innermost layer is stone/ore (no separate core id); upgrade if the example looks dull.
+// shortcut: dirt thickness is patchy per 64 pseudo-angle buckets, independent hashes (intended)
+
+// Grid is chunks x chunks chunks (chunks * 32 tiles per side); radius is the disc radius in tiles.
+struct RoundSpec {
+  int chunks;
+  int radius;
+};
+
+constexpr RoundSpec kPlanetSpec = {4, 60};      // 128 x 128 tiles
+constexpr RoundSpec kAsteroid1Spec = {1, 14};   // 32 x 32 tiles
+constexpr RoundSpec kAsteroid2Spec = {2, 29};   // 64 x 64 tiles
+
+// Reference per-tile form of roundGen: tile (tx, ty) in world coordinates, written to *fg and *wall. A tile outside the
+// grid or outside the disc is air in both layers, even if the radius is too large for the grid.
+// Layers by depth below the rim: grass, 1-2 dirt (patchy by direction), stone with ore zones by direction and depth.
+void roundTile(const RoundSpec& s, int tx, int ty, uint32_t seed, uint8_t* fg, uint8_t* wall);
+
+// Fills chunk (cx, cy) of the round world s (kChunkTiles bytes each for fg and wall, row-major); equals roundTile.
+void roundGen(const RoundSpec& s, uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed);
+
+// GenFn wrappers: roundGen with kPlanetSpec, kAsteroid1Spec and kAsteroid2Spec.
+void planetGen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed);
+void asteroid1Gen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed);
+void asteroid2Gen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed);
+
+// Gravity toward the centre (cx, cy) for a point (x, y) in any one unit: the larger axis offset wins, a tie (exact
+// diagonal, centre included) goes to the vertical axis, so the centre itself gives Down. Right of the centre pulls
+// Left, below it pulls Up.
+GravityDir roundGravity(int x, int y, int cx, int cy);
+
+// roundGravity for tile (tx, ty) of the grid of s, using tile centres in doubled units (2 * t + 1) against the
+// grid centre (chunks * 32, chunks * 32).
+GravityDir roundTileGravity(const RoundSpec& s, int tx, int ty);
 
 }  // namespace pge
