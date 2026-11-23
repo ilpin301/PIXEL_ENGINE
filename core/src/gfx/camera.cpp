@@ -8,9 +8,12 @@ int clampAxis(int pos, int view, int world) {
   return pos < 0 ? 0 : pos > max ? max : pos;
 }
 
+int Camera::visW() const { return (orient & 1) ? view_h : view_w; }
+int Camera::visH() const { return (orient & 1) ? view_w : view_h; }
+
 void Camera::clamp() {
-  x = clampAxis(x, view_w, world_w);
-  y = clampAxis(y, view_h, world_h);
+  x = clampAxis(x, visW(), world_w);
+  y = clampAxis(y, visH(), world_h);
 }
 
 void Camera::moveTo(int nx, int ny) {
@@ -19,7 +22,16 @@ void Camera::moveTo(int nx, int ny) {
   clamp();
 }
 
-void Camera::centerOn(int px, int py) { moveTo(px - view_w / 2, py - view_h / 2); }
+void Camera::centerOn(int px, int py) { moveTo(px - visW() / 2, py - visH() / 2); }
+
+Rect Camera::toScreen(Rect world) const {
+  return turnRect(Rect{world.x - x, world.y - y, world.w, world.h}, visW(), visH(), orient);
+}
+
+SpriteFlags Camera::spriteFlags(SpriteFlags f) const {
+  const int rot = (((f >> 2) & 3) + orient) & 3;  // add, not OR: Rot90 + 3 turns is None
+  return static_cast<SpriteFlags>((f & (FlipX | FlipY)) | (rot << 2));
+}
 
 int parallaxOffset(int cam, int factor_q8) {
   return static_cast<int>((static_cast<int64_t>(cam) * factor_q8) >> 8);
@@ -28,7 +40,8 @@ int parallaxOffset(int cam, int factor_q8) {
 void drawLayers(Canvas& c, const Camera& cam, const MapLayer* layers, int count) {
   if (!layers) return;
   for (int i = 0; i < count; i++)
-    c.tilemap(layers[i].tiles, parallaxOffset(cam.x, layers[i].px_q8), parallaxOffset(cam.y, layers[i].py_q8));
+    c.tilemap(layers[i].tiles, parallaxOffset(cam.x, layers[i].px_q8), parallaxOffset(cam.y, layers[i].py_q8),
+              cam.orient);
 }
 
 }  // namespace pge

@@ -33,9 +33,26 @@ void Canvas::fillRect(Rect r, Color c) {
 
 void Canvas::clear(Color c) { fillRect(Rect{0, by_, w_, bh_}, c); }
 
+// Flags-0 blit with plain pointer steps; a separate function because blit is too big to be inlined into tilemap.
+void Canvas::blitPlain(const uint8_t* src, const Color* pal, int sw, int sh, int stride, int x, int y,
+                       bool transparent) {
+  Rect r{x, y, sw, sh};
+  if (!clip(r)) return;
+  const uint8_t* srow = src + (r.y - y) * stride + (r.x - x);
+  for (int j = 0; j < r.h; j++, srow += stride) {
+    Color* drow = buf_ + (r.y + j - by_) * w_ + r.x;
+    if (transparent) {
+      for (int i = 0; i < r.w; i++) if (srow[i]) drow[i] = pal[srow[i]];
+    } else {
+      for (int i = 0; i < r.w; i++) drow[i] = pal[srow[i]];
+    }
+  }
+}
+
 // Draws src (sw x sh pixels, row stride `stride`): flips first, then a clockwise rotation from flags bits 2-3.
 void Canvas::blit(const uint8_t* src, const Color* pal, int sw, int sh, int stride, int x, int y, uint8_t flags,
                   bool transparent) {
+  if (flags == 0) { blitPlain(src, pal, sw, sh, stride, x, y, transparent); return; }
   const int rot = (flags >> 2) & 3;
   Rect r{x, y, (rot & 1) ? sh : sw, (rot & 1) ? sw : sh};
   if (!clip(r)) return;
@@ -77,19 +94,34 @@ void Canvas::sprite(const SpriteSheet& s, uint16_t frame, int x, int y, SpriteFl
   blit(src, s.palette, s.w, s.h, (int)stride, x, y, f, s.transparent);
 }
 
-void Canvas::tilemap(const TileLayer& l, int cam_x, int cam_y) {
+Rect turnRect(Rect r, int view_w, int view_h, int quarter_turns) {
+  switch (quarter_turns & 3) {
+    case 1: return Rect{view_h - (r.y + r.h), r.x, r.h, r.w};
+    case 2: return Rect{view_w - (r.x + r.w), view_h - (r.y + r.h), r.w, r.h};
+    case 3: return Rect{r.y, view_w - (r.x + r.w), r.h, r.w};
+    default: return r;
+  }
+}
+
+void Canvas::tilemap(const TileLayer& l, int cam_x, int cam_y, uint8_t orient) {
   const Tileset& ts = *l.set;
   int tw = ts.tile_w, th = ts.tile_h;
   if (tw == 0 || th == 0) return;
+  const int o = orient & 3;
+  const int vw = (o & 1) ? h_ : w_, vh = (o & 1) ? w_ : h_;  // visible world size
+  // the band undone back into world space (relative to the view's top-left)
+  const Rect wb = turnRect(Rect{0, by_, w_, bh_}, w_, h_, (4 - o) & 3);
   // tile rows / columns that touch the band and the screen
-  int ty0 = floorDiv(by_ + cam_y, th), ty1 = floorDiv(by_ + bh_ - 1 + cam_y, th);
-  int tx0 = floorDiv(cam_x, tw), tx1 = floorDiv(w_ - 1 + cam_x, tw);
+  int ty0 = floorDiv(wb.y + cam_y, th), ty1 = floorDiv(wb.y + wb.h - 1 + cam_y, th);
+  int tx0 = floorDiv(wb.x + cam_x, tw), tx1 = floorDiv(wb.x + wb.w - 1 + cam_x, tw);
   for (int ty = ty0; ty <= ty1; ty++) {
     if (ty < 0 || ty >= l.h) continue;
     for (int tx = tx0; tx <= tx1; tx++) {
       if (tx < 0 || tx >= l.w) continue;
       uint8_t id = l.tiles[ty * l.w + tx];
-      blit(ts.px + (uint32_t)id * tw * th, ts.palette, tw, th, tw, tx * tw - cam_x, ty * th - cam_y, 0, ts.transparent);
+      // the tile's world box turned onto the screen; blit turns the pixels the same way
+      const Rect s = turnRect(Rect{tx * tw - cam_x, ty * th - cam_y, tw, th}, vw, vh, o);
+      blit(ts.px + (uint32_t)id * tw * th, ts.palette, tw, th, tw, s.x, s.y, (uint8_t)(o << 2), ts.transparent);
     }
   }
 }

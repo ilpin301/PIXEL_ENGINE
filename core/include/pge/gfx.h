@@ -7,6 +7,12 @@ namespace pge {
 typedef uint16_t Color;  // RGB565
 struct Rect { int x, y, w, h; };
 
+// r is a rect relative to the top-left of a picture of view_w x view_h pixels. Returns the same rect after that picture
+// is turned clockwise by quarter_turns (only the low 2 bits count), relative to the top-left of the turned picture
+// (view_h x view_w for odd turns). w and h of the rect swap for odd turns. 1 turn: new x = view_h - (y + h), new y = x;
+// 2 turns: new x = view_w - (x + w), new y = view_h - (y + h); 3 turns: new x = y, new y = view_w - (x + w).
+Rect turnRect(Rect r, int view_w, int view_h, int quarter_turns);
+
 // Flips apply to the stored image first, then the result is rotated clockwise by the field in bits 2-3
 // (use at most one of Rot90 / Rot180 / Rot270). With Rot90 / Rot270 the drawn rectangle is h wide and w tall;
 // (x, y) is always its top-left corner.
@@ -50,8 +56,10 @@ class Canvas {
   void text(const Font& f, int x, int y, const char* s, Color c);  // transparent background, newline starts a line
   uint16_t dropped() const { return drops_; }  // invalid-argument draws in this canvas (saturating)
   void sprite(const SpriteSheet& s, uint16_t frame, int x, int y, SpriteFlags f);
-  // Integer camera offsets (world pixel at the screen's top-left); see camera.h for Camera and parallax layers.
-  void tilemap(const TileLayer& l, int cam_x, int cam_y);
+  // Integer camera offsets: cam_x / cam_y are the top-left of the axis-aligned world rect the screen shows; see
+  // camera.h for Camera and parallax layers. "orient" = clockwise quarter turns applied to the whole world picture
+  // before it is shown, 0..3 (only the low 2 bits count); each tile is drawn turned by orient.
+  void tilemap(const TileLayer& l, int cam_x, int cam_y, uint8_t orient = 0);
 
  private:
   void put(int x, int y, Color c) {  // the one clipped pixel write of every primitive
@@ -61,6 +69,7 @@ class Canvas {
   void drop() { if (by_ == 0 && drops_ != 0xFFFF) drops_++; }
   bool clip(Rect& r) const;  // r -> intersection with band and screen; false if empty
   void blit(const uint8_t* src, const Color* pal, int sw, int sh, int stride, int x, int y, uint8_t flags, bool transparent);
+  void blitPlain(const uint8_t* src, const Color* pal, int sw, int sh, int stride, int x, int y, bool transparent);
   Color* buf_;
   int w_, h_, by_, bh_;
   uint32_t seed_;

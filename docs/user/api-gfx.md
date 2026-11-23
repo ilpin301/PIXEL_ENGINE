@@ -3,9 +3,9 @@
 > Summary for later sessions
 > - Covers 6 headers under `core/include/pge/`: `gfx.h`, `color.h`, `sprite.h`, `camera.h`, `ui.h`, `particles.h`.
 > - All identifiers are in namespace `pge` (UI widgets in `pge::ui`).
-> - `gfx.h`: Color, Rect, SpriteFlags, SpriteSheet, Tileset, TileLayer, Font, Canvas, RenderConfig, renderFrame.
+> - `gfx.h`: Color, Rect, SpriteFlags, SpriteSheet, Tileset, TileLayer, Font, Canvas, RenderConfig, renderFrame, turnRect.
 > - `color.h`: rgb(), red8/green8/blue8, kPalette16.
-> - `sprite.h`: Animation, animFrame. `camera.h`: Camera, clampAxis, parallaxOffset, MapLayer, drawLayers.
+> - `sprite.h`: Animation, animFrame. `camera.h`: Camera, clampAxis, parallaxOffset, MapLayer, drawLayers, orientForGravity.
 > - `ui.h`: Style, label, bar, iconGrid, listMenu, formatU32, MenuNav. `particles.h`: Particle, Particles.
 > - Source of truth is the header comments; this file only restates them.
 
@@ -57,7 +57,7 @@ Valid only inside a `RenderFn`; made by `renderFrame`. All coordinates are logic
 | `text` | `void text(const Font& f, int x, int y, const char* s, Color c);` | transparent background, newline starts a line |
 | `dropped` | `uint16_t dropped() const` | invalid-argument draws in this canvas (saturating) |
 | `sprite` | `void sprite(const SpriteSheet& s, uint16_t frame, int x, int y, SpriteFlags f);` | |
-| `tilemap` | `void tilemap(const TileLayer& l, int cam_x, int cam_y);` | Integer camera offsets (world pixel at the screen's top-left); see `camera.h` for Camera and parallax layers. |
+| `tilemap` | `void tilemap(const TileLayer& l, int cam_x, int cam_y, uint8_t orient = 0);` | `cam_x`, `cam_y` are the world pixel at the top-left of the world rectangle the screen shows (the same meaning as `Camera` x, y, for every `orient`). `orient` is the number of clockwise quarter turns of the picture, 0..3 (same numbering as the rotation field of `SpriteFlags`). See `camera.h` for Camera and parallax layers. |
 
 Drop counting: invalid-argument draws are counted only on the band that starts at row 0, so one bad call per frame counts once, not once per band.
 
@@ -67,6 +67,7 @@ Drop counting: invalid-argument draws are counted only on the band that starts a
 |---|---|
 | `int textWidth(const Font& f, const char* s);` | Widest line of s in pixels (no trailing spacing); 0 for null or empty. |
 | `int renderFrame(const RenderConfig& cfg, Color* band_buf, uint32_t band_buf_pixels, uint32_t seed, RenderFn fn, void* ctx);` | Draws one frame band by band through the display HAL (K2). Returns Ok, InvalidArg, or a nonzero flush/wait result. `band_lines > logical_h` is clamped; the last band may be shorter. Flush rects are in display coordinates (logical * scale). |
+| `turnRect` | `Rect turnRect(Rect r, int view_w, int view_h, int quarter_turns);` | Turns `r`, given relative to the top-left of a view of `view_w` x `view_h`, by `quarter_turns` clockwise quarter turns (0..3). The result is relative to the top-left of the turned picture; w and h swap for odd `quarter_turns`. |
 
 ## `pge/color.h`
 
@@ -110,14 +111,18 @@ Camera clamping, parallax offsets and multi-layer tile drawing. Includes `pge/gf
 
 ### `struct Camera`
 
-Top-left world pixel of the screen (x, y) plus the view and world sizes, all in pixels.
+Camera position (x, y) is the top-left world pixel of the world rectangle the screen shows. The view and world sizes and the orientation follow. All in pixels.
 
 | Member | Signature | Meaning |
 |---|---|---|
-| fields | `int x = 0, y = 0; int view_w = 0, view_h = 0; int world_w = 0, world_h = 0;` | |
-| `clamp` | `void clamp();` | `clampAxis` on both axes |
+| fields | `int x = 0, y = 0; int view_w = 0, view_h = 0; int world_w = 0, world_h = 0; uint8_t orient = 0;` | `x`, `y`: top-left of the shown world rectangle, in world pixels (same for every `orient`). `view_w`, `view_h`: screen size. `world_w`, `world_h`: world size. `orient`: clockwise quarter turns of the picture, 0..3. |
+| `visW` | `int visW() const` | Width in world pixels of the shown world rectangle: `view_w` for even `orient`, `view_h` for odd. |
+| `visH` | `int visH() const` | Height in world pixels of the shown world rectangle: `view_h` for even `orient`, `view_w` for odd. |
+| `toScreen` | `Rect toScreen(Rect world) const` | Maps a world rect to a screen rect; swaps w and h for odd `orient`. Pass a 1x1 rect for a point. |
+| `spriteFlags` | `SpriteFlags spriteFlags(SpriteFlags f) const` | Adds `orient` to the rotation field modulo 4; FlipX and FlipY are kept. |
+| `clamp` | `void clamp();` | `clampAxis` on both axes, with `visW()` / `visH()` as the view size against `world_w` / `world_h`. |
 | `moveTo` | `void moveTo(int nx, int ny);` | sets x, y, then clamps |
-| `centerOn` | `void centerOn(int px, int py);` | puts the world point (px, py) at the view centre, then clamps |
+| `centerOn` | `void centerOn(int px, int py);` | puts the world point (px, py) at the centre of the shown rectangle (`visW()` x `visH()`), then clamps. |
 
 ### Free functions and types
 
@@ -125,8 +130,19 @@ Top-left world pixel of the screen (x, y) plus the view and world sizes, all in 
 |---|---|---|
 | `clampAxis` | `int clampAxis(int pos, int view, int world);` | Camera position on one axis for a view of `view` pixels in a world of `world` pixels. If the world is larger than the view, pos is clamped to `[0, world - view]`. Otherwise the world is centred: `floor((world - view) / 2)`, which is <= 0 (the world is drawn with a margin; floor keeps odd differences deterministic). |
 | `parallaxOffset` | `int parallaxOffset(int cam, int factor_q8);` | `floor(cam * factor_q8 / 256)` for a Q8 factor: 256 = 1.0 (moves with the world), 0 = fixed background, 128 = half speed, > 256 = foreground that moves faster. Floors for negative cam too. |
+| `orientForGravity` | `inline uint8_t orientForGravity(GravityDir g)` | Orientation that puts gravity `g` at the bottom of the screen: Down 0, Right 1, Up 2, Left 3. `GravityDir` is in `pge/collision.h`. |
 | `MapLayer` | `struct MapLayer { TileLayer tiles; uint16_t px_q8 = 256, py_q8 = 256; };` | One tile layer with its parallax factors (Q8, see `parallaxOffset`). |
-| `drawLayers` | `void drawLayers(Canvas& c, const Camera& cam, const MapLayer* layers, int count);` | Draws `layers[0]` (back) to `layers[count - 1]` (front); a layer drawn over another needs a transparent tileset. Null `layers` or `count <= 0` draws nothing. The caller keeps `count <= PGE_PARALLAX_LAYERS` (not enforced). |
+| `drawLayers` | `void drawLayers(Canvas& c, const Camera& cam, const MapLayer* layers, int count);` | Draws `layers[0]` (back) to `layers[count - 1]` (front); a layer drawn over another needs a transparent tileset. Null `layers` or `count <= 0` draws nothing. The caller keeps `count <= PGE_PARALLAX_LAYERS` (not enforced). Each layer is drawn with `cam.orient`; parallax offsets are computed per world axis from `cam.x` and `cam.y`, as before. |
+
+### Turning the view (orientation)
+
+- `orient` is the number of clockwise quarter turns of the world picture: 0 as drawn, 1 turned 90 degrees clockwise, 2 turned 180, 3 turned 270. It uses the same numbers as the rotation field of `SpriteFlags` (`Rot90`, `Rot180`, `Rot270`).
+- Camera `x`, `y` always name the top-left corner of the world rectangle the screen shows, in world pixels, for every `orient`. The turn happens around that rectangle; `visW()` and `visH()` give its size.
+- Corner rule: the turn is clockwise, so each world corner moves clockwise with the picture. At `orient` 1 the world's top-left corner appears at the screen's top-right corner.
+- To draw consistently, convert world rects with `cam.toScreen(rect)` for the screen position and size, and pass `cam.spriteFlags(flags)` to `Canvas::sprite`. For a tile map, call `Canvas::tilemap(layer, cam.x, cam.y, cam.orient)`; `drawLayers` does this for every layer.
+- Gravity: `orientForGravity(g)` gives the `orient` that puts gravity at the bottom of the screen: Down 0, Right 1, Up 2, Left 3. These are orient numbers, not the values of the `GravityDir` enum.
+- The F429 flush transpose only maps the 320x240 picture onto the portrait panel. It is unrelated to `orient` and does not rotate the game view.
+- No new flags are needed: `SpriteFlags` already cover all 8 orientations. `Rot90` / `Rot180` / `Rot270` combined with `FlipX` / `FlipY` give all eight; a plain transpose is `Rot90` or `Rot270` with one flip.
 
 ## `pge/ui.h`
 

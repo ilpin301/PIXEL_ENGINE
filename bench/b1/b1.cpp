@@ -6,9 +6,11 @@ using namespace pge;
 
 namespace {
 
-enum { kItems = 8, kSprites = 100 };
-const char* const kNames[kItems] = {"clear",        "flush_only",   "sprites_opaque", "sprites_transparent",
-                                    "tiles8_static", "tiles16_static", "tiles8_scroll",  "tiles16_scroll"};
+enum { kItems = 14, kSprites = 100 };
+const char* const kNames[kItems] = {"clear",          "flush_only",        "sprites_opaque",    "sprites_transparent",
+                                    "tiles8_static",   "tiles16_static",    "tiles8_scroll",     "tiles16_scroll",
+                                    "tiles8_scroll_r90", "tiles8_scroll_r180", "tiles8_scroll_r270",
+                                    "sprites_transparent_r90", "sprites_transparent_r180", "sprites_transparent_r270"};
 
 // ---- static assets, filled once by initAssets ----
 Color g_pal[16];
@@ -16,8 +18,9 @@ uint8_t g_tile8[4 * 8 * 8];
 uint8_t g_tile16[4 * 16 * 16];
 uint8_t g_sprite_o[16 * 16];
 uint8_t g_sprite_t[16 * 16];
-uint8_t g_map8[2][48 * 36];
-uint8_t g_map16[2][24 * 18];
+// square maps: a 320x240 view turned 90 degrees plus the scroll range must fit on both axes
+uint8_t g_map8[2][48 * 48];
+uint8_t g_map16[2][24 * 24];
 Tileset g_ts8, g_ts16;
 TileLayer g_layer8[2], g_layer16[2];
 SpriteSheet g_sheet_o, g_sheet_t;
@@ -48,12 +51,12 @@ void initAssets() {
       g_sprite_t[y * 16 + x] = r2 <= 196 ? (uint8_t)(r2 >= 100 ? 8 : 9) : 0;  // 0 = transparent
     }
   for (int l = 0; l < 2; l++) {
-    for (int y = 0; y < 36; y++)
+    for (int y = 0; y < 48; y++)
       for (int x = 0; x < 48; x++) g_map8[l][y * 48 + x] = (uint8_t)((x * 3 + y * 5 + l) & 3);
-    for (int y = 0; y < 18; y++)
+    for (int y = 0; y < 24; y++)
       for (int x = 0; x < 24; x++) g_map16[l][y * 24 + x] = (uint8_t)((x * 3 + y * 5 + l) & 3);
-    g_layer8[l] = TileLayer{g_map8[l], 48, 36, &g_ts8};
-    g_layer16[l] = TileLayer{g_map16[l], 24, 18, &g_ts16};
+    g_layer8[l] = TileLayer{g_map8[l], 48, 48, &g_ts8};
+    g_layer16[l] = TileLayer{g_map16[l], 24, 24, &g_ts16};
   }
   g_ts8 = Tileset{g_tile8, g_pal, 8, 8};
   g_ts16 = Tileset{g_tile16, g_pal, 16, 16};
@@ -66,28 +69,36 @@ const uint32_t kAssetBytes = sizeof g_pal + sizeof g_tile8 + sizeof g_tile16 + s
 
 struct Ctx { uint32_t frame; int item; };
 
-void drawSprites(Canvas& c, const SpriteSheet& s, uint32_t frame) {
+void drawSprites(Canvas& c, const SpriteSheet& s, uint32_t frame, SpriteFlags fl = None) {
   int mx = c.width() - 16, my = c.height() - 16;
   for (int i = 0; i < kSprites; i++) {
     int x = (int)(((uint32_t)i * 37u + frame) % (uint32_t)mx);
     int y = (int)(((uint32_t)i * 23u + frame / 2u) % (uint32_t)my);
-    c.sprite(s, 0, x, y, None);
+    c.sprite(s, 0, x, y, fl);
   }
 }
 
+// Two tile layers under one camera; scroll moves the camera across the map.
+void drawTiles(Canvas& c, uint32_t frame, bool big, bool scroll, uint8_t orient) {
+  int cx = scroll ? (int)(frame % 64u) : 0, cy = scroll ? (int)(frame % 48u) : 0;
+  c.tilemap(big ? g_layer16[0] : g_layer8[0], cx, cy, orient);
+  c.tilemap(big ? g_layer16[1] : g_layer8[1], cx, cy, orient);
+}
+
+const SpriteFlags kRot[3] = {Rot90, Rot180, Rot270};
+
 void renderItem(Canvas& c, void* p) {
   const Ctx* ctx = static_cast<const Ctx*>(p);
-  switch (ctx->item) {
+  const int item = ctx->item;
+  switch (item) {
     case 0: c.clear((Color)(0x3186 + ctx->frame)); break;
     case 1: break;
     case 2: drawSprites(c, g_sheet_o, ctx->frame); break;
     case 3: drawSprites(c, g_sheet_t, ctx->frame); break;
-    default: {  // 4..7: tiles8_static, tiles16_static, tiles8_scroll, tiles16_scroll
-      bool big = (ctx->item & 1) != 0, scroll = ctx->item >= 6;
-      int cx = scroll ? (int)(ctx->frame % 64u) : 0, cy = scroll ? (int)(ctx->frame % 48u) : 0;
-      c.tilemap(big ? g_layer16[0] : g_layer8[0], cx, cy);
-      c.tilemap(big ? g_layer16[1] : g_layer8[1], cx, cy);
-    }
+    default:
+      if (item <= 7) drawTiles(c, ctx->frame, (item & 1) != 0, item >= 6, 0);           // 4..7
+      else if (item <= 10) drawTiles(c, ctx->frame, false, true, (uint8_t)(item - 7));  // 8..10: orient 1..3
+      else drawSprites(c, g_sheet_t, ctx->frame, kRot[item - 11]);                      // 11..13
   }
 }
 
