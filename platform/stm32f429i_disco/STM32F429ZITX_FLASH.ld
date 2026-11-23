@@ -48,6 +48,7 @@ MEMORY
   CCMRAM    (xrw)    : ORIGIN = 0x10000000,   LENGTH = 64K
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 192K
   ROM    (rx)    : ORIGIN = 0x08000000,   LENGTH = 2048K
+  SDRAM  (rw)    : ORIGIN = 0xD0400000,   LENGTH = 4M   /* upper half of the 8 MB SDRAM; the lower half holds fixed buffers: FB0 0xD0000000, FB1 0xD0040000, self-test 0xD0100000 (256 KB), b1 band 0xD0200000 */
 }
 
 /* Sections */
@@ -195,6 +196,18 @@ SECTIONS
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM
+
+  /* External SDRAM (S8.2): NOLOAD, so objcopy -O binary ignores it and startup neither copies nor zeroes it. It is usable
+     only after BSP_SDRAM_Init (run by BSP_LCD_Init in pge_hal_display_init). Holds PGE_RAM_EXT buffers. */
+  .sdram (NOLOAD) :
+  {
+    . = ALIGN(8);
+    _ssdram = .;
+    *(.sdram)
+    *(.sdram*)
+    . = ALIGN(8);
+    _esdram = .;
+  } >SDRAM
 
   /* Remove information from the compiler libraries */
   /DISCARD/ :

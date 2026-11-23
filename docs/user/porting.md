@@ -130,7 +130,7 @@ How to choose and override:
 - Any other macro in the table: `#define` it in `pge_profile.h` (board-wide) or `pge_user_config.h` (per game) before `config.h` reads it.
 - `PGE_SCALE` (default 1) must be 1..`PGE_INTEGER_SCALE_MAX`; display size = logical size x `PGE_SCALE`. For `PGE_SCALE` > 1 the init arena grows by `PGE_SCALE_STAGING_BYTES`.
 - `PGE_TICK_HZ` (default 60), `PGE_DEBUG_OVERLAY` (default 1, compiled out at 0) and `PGE_LIGHTING_ENABLED` (default 0) are not profile-dependent.
-- Placement: define `PGE_RAM_FAST`, `PGE_RAM_DMA`, `PGE_RAM_EXT`, `PGE_ROM` in `pge_profile.h` as section attributes of your linker script; leave them undefined to get empty macros. Neither the F429 nor the host profile defines them.
+- Placement: define `PGE_RAM_FAST`, `PGE_RAM_DMA`, `PGE_RAM_EXT`, `PGE_ROM` in `pge_profile.h` as section attributes of your linker script; leave them undefined to get empty macros. The host profile defines none of them; the F429 profile defines only PGE_RAM_EXT as section .sdram (NOLOAD, upper 4 MB of the SDRAM at 0xD0400000, usable after pge::init(); S8.2).
 
 ## 5 Worked example 1: STM32F429I-DISCO
 

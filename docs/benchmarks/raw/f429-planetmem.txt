@@ -1,0 +1,7 @@
+PGELOG1
+# PLANETMEM world=4x4 tile_px=8 slots=16 loaded=16 change=32768/32768
+time_us fill=147371 (32767 appends) front_insert=19806 overwrite=5 load_avg=860 load_max=863
+ram data=33348 bss=71564 end=0x200199d8 estack=0x20030000 stack_hw=664 of 91688
+arena init hw=53376 cap=65536 failed=0 | log(sdram) hw=163840 cap=163904 failed=0
+sdram section 0xd0400000..0xd0428040 (163904 B)
+# PLANETMEM PASS

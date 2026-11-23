@@ -25,8 +25,9 @@ Error World::init(const WorldConfig& c, Arena& arena) {
   uint8_t* data = arena.allocArray<uint8_t>((size_t)slots * 2 * kChunkTiles);
   int32_t* sc = arena.allocArray<int32_t>(slots);
   uint32_t* ss = arena.allocArray<uint32_t>(slots);
-  uint32_t* key = arena.allocArray<uint32_t>(cap);
-  uint8_t* tile = arena.allocArray<uint8_t>(cap);
+  Arena& log = c.log_arena ? *c.log_arena : arena;
+  uint32_t* key = log.allocArray<uint32_t>(cap);
+  uint8_t* tile = log.allocArray<uint8_t>(cap);
   if (!data || !sc || !ss || !key || !tile) return OutOfMemory;
   for (int i = 0; i < slots; i++) { sc[i] = -1; ss[i] = 0; }
   w_chunks_ = c.w_chunks; h_chunks_ = c.h_chunks; slots_ = slots; loaded_ = 0; last_hit_ = 0;

@@ -93,12 +93,13 @@ logged edits for it; dropping a chunk from the cache never needs a write. Includ
 | `uint16_t cache_slots` | 0 = `PGE_CHUNK_CACHE_COUNT` |
 | `uint32_t change_capacity` | 0 = 4096 entries (5 B each) |
 | `int tile_px` | tile size in pixels, >= 1 (0 = 16) |
+| `Arena* log_arena` | change log arena; `nullptr` = the arena passed to `init`. Lets a game put a big log in external RAM (the F429 planet check puts 163,840 B in SDRAM, S8.2) |
 
 ### `class World`
 
 | Signature | Meaning |
 |---|---|
-| `Error init(const WorldConfig& cfg, Arena& arena)` | allocates chunk cache, slot metadata and change log from the arena; `InvalidArg` on null gen/props, zero size, more than 65535 chunks or `tile_px < 0`; `OutOfMemory` if the arena runs out |
+| `Error init(const WorldConfig& cfg, Arena& arena)` | allocates chunk cache and slot metadata from the arena, the change log from `cfg.log_arena` (or the arena); `InvalidArg` on null gen/props, zero size, more than 65535 chunks or `tile_px < 0`; `OutOfMemory` if an arena runs out |
 | `uint8_t get(int tx, int ty, Layer l) const` | tile at (tx, ty); `kTileVoid` if out of bounds or the chunk is not loaded |
 | `Error set(int tx, int ty, Layer l, uint8_t t)` | `InvalidArg` if out of bounds or `t == kTileVoid`; edits in unloaded chunks are only logged and applied on the next load; a repeated set of one cell overwrites its entry; a new entry in a full log gives `OutOfMemory` |
 | `bool inBounds(int tx, int ty) const` | |

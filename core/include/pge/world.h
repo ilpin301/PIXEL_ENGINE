@@ -32,12 +32,13 @@ struct WorldConfig {
   uint16_t cache_slots;         // 0 = PGE_CHUNK_CACHE_COUNT
   uint32_t change_capacity;     // 0 = 4096 entries (5 B each)
   int tile_px;                  // tile size in pixels, >= 1 (0 = 16)
+  Arena* log_arena;             // change log arena; nullptr = the arena passed to World::init (e.g. external RAM, S8.2)
 };
 
 class World {
  public:
-  // Allocates chunk cache, slot metadata and change log from the arena. InvalidArg on null gen/props, zero size,
-  // more than 65535 chunks or tile_px < 0; OutOfMemory if the arena runs out.
+  // Allocates chunk cache and slot metadata from the arena, the change log from cfg.log_arena (or the arena). InvalidArg
+  // on null gen/props, zero size, more than 65535 chunks or tile_px < 0; OutOfMemory if an arena runs out.
   Error init(const WorldConfig& cfg, Arena& arena);
 
   // kTileVoid if out of bounds or the chunk is not loaded.

@@ -1,5 +1,5 @@
 // World tests (S5.1a): flat generator, cache + LRU eviction, change log (edits survive eviction), bounds,
-// activation hook, moveAndCollide(World) vs moveAndCollide(TileGrid), and a print-only change-log insert timing.
+// activation hook, moveAndCollide(World) vs moveAndCollide(TileGrid), and a print-only change-log insert timing. S8.2: 4x4 planet with the change log in its own arena.
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -321,6 +321,59 @@ static int testInsertTiming() {
   return 0;
 }
 
+// S8.2: a 4x4 planet (128 x 128 tiles) with 16 cache slots, so the whole planet stays resident, and the worst-case
+// change log (every cell of both layers: 32,768 entries, 163,840 B) in its own arena, as the F429 puts it in SDRAM.
+static uint8_t planetTile(int tx, int ty, int l) { return (tx == 0 && ty == 0 && l == 0) ? 9 : (uint8_t)(1 + (tx + ty + l) % 7); }
+
+static int testPlanet() {
+  const uint32_t kCells = 128u * 128u * 2u;
+  const size_t kSlotBytes = 16u * 2u * kChunkTiles;
+  Arena chunks, log;
+  chunks.init(g_buf[0], sizeof(g_buf[0]));
+  log.init(g_buf[1], sizeof(g_buf[1]));
+  WorldConfig c{};
+  c.w_chunks = 4;
+  c.h_chunks = 4;
+  c.seed = 7;
+  c.gen = flatGen;
+  c.props = g_props;
+  c.cache_slots = 16;
+  c.change_capacity = kCells;
+  c.tile_px = 8;
+  c.log_arena = &log;
+  World w;
+  CHECK(w.init(c, chunks) == Ok);
+  CHECK(chunks.used() >= kSlotBytes && chunks.used() < kSlotBytes + 256);  // slots + slot metadata, no log
+  CHECK(log.used() == (size_t)kCells * 5);
+  std::printf("planet 4x4: chunk arena %u B, log arena %u B\n", (unsigned)chunks.used(), (unsigned)log.used());
+  // Fill the log before loading (edits in unloaded chunks are only logged), ascending keys, fg (0,0) left out.
+  for (int ch = 0; ch < 16; ch++)
+    for (int l = 0; l < 2; l++)
+      for (int i = 0; i < kChunkTiles; i++) {
+        if (ch == 0 && l == 0 && i == 0) continue;
+        const int tx = (ch % 4) * 32 + (i & 31), ty = (ch / 4) * 32 + (i >> 5);
+        CHECK(w.set(tx, ty, (Layer)l, planetTile(tx, ty, l)) == Ok);
+      }
+  CHECK(w.changeCount() == kCells - 1);
+  CHECK(w.set(0, 0, Layer::Fg, 9) == Ok && w.changeCount() == kCells);  // front insert into the last free entry
+  CHECK(w.changeKeyAt(0) == 0 && w.changeTileAt(0) == 9);
+  CHECK(w.set(70, 70, Layer::Wall, planetTile(70, 70, 1)) == Ok && w.changeCount() == kCells);  // full log, overwrite ok
+  CHECK(w.ensureLoaded(Rect{0, 0, 1024, 1024}, 16) == 0 && w.chunksLoaded() == 16);
+  for (int ty = 0; ty < 128; ty++)
+    for (int tx = 0; tx < 128; tx++) {
+      CHECK(w.get(tx, ty, Layer::Fg) == planetTile(tx, ty, 0));
+      CHECK(w.get(tx, ty, Layer::Wall) == planetTile(tx, ty, 1));
+    }
+  // A log arena one byte too small fails; a null log_arena puts the log in the main arena (old behaviour).
+  chunks.init(g_buf[0], sizeof(g_buf[0]));
+  log.init(g_buf[1], (size_t)kCells * 5 - 1);
+  CHECK(w.init(c, chunks) == OutOfMemory);
+  chunks.init(g_buf[0], sizeof(g_buf[0]));
+  c.log_arena = nullptr;
+  CHECK(w.init(c, chunks) == Ok && chunks.used() >= kSlotBytes + (size_t)kCells * 5);
+  return 0;
+}
+
 int main() {
   initProps();
   if (testGen()) return 1;
@@ -331,6 +384,7 @@ int main() {
   if (testActivate()) return 1;
   if (testCollision()) return 1;
   if (testInsertTiming()) return 1;
+  if (testPlanet()) return 1;
   std::printf("world: all tests passed\n");
   return 0;
 }

@@ -18,7 +18,7 @@
 | Clock | 180 MHz from the 8 MHz HSE (PLL 8/360/2, overdrive) |
 | Screen | 240x320 portrait RGB565 panel on the LTDC |
 | Logical size used by the engine | 320x240 landscape (the display HAL transposes); a 240x320 portrait mode also exists |
-| External RAM | SDRAM at 0xD0000000; framebuffers FB0 0xD0000000 and FB1 0xD0040000 |
+| External RAM | SDRAM at 0xD0000000 (8 MB); framebuffers FB0 0xD0000000 and FB1 0xD0040000; PGE_RAM_EXT buffers in the NOLOAD section .sdram at 0xD0400000-0xD07FFFFF (S8.2), zeroed by their owner after pge::init() |
 | Programmer | on-board ST-LINK (used by OpenOCD) |
 | UART | none used; debug output goes to a RAM ring buffer |
 | LEDs | LD3 red = error, LD4 green = ok (used by the bench firmwares) |

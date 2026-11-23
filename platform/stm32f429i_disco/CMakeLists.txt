@@ -104,6 +104,11 @@ pge_f429_platformer(pge_f429_platformer flash_f429_platformer 0 1)
 pge_f429_platformer(pge_f429_platbench flash_f429_platbench 1 1)
 pge_f429_platformer(pge_f429_platbench_nobb flash_f429_platbench_nobb 1 0)
 
+# Planet memory check (S8.2): 4x4 world, 16 cache slots in the init arena, worst-case change log in SDRAM (.sdram NOLOAD).
+add_executable(pge_f429_planetmem ${CMAKE_SOURCE_DIR}/examples/f429/planetmem_main.cpp)
+target_link_libraries(pge_f429_planetmem PRIVATE pge_core pge_f429_hal)
+pge_f429_firmware(pge_f429_planetmem flash_f429_planetmem)
+
 # Sandbox example (S6.2b): one main source, compile-time switches SANDBOX_BENCH (autoplay + log summary), SANDBOX_BACKBUF and
 # SANDBOX_USB (USB stick saves, 168 MHz).
 function(pge_f429_sandbox tgt flash_tgt bench backbuf usb)
