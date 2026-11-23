@@ -124,11 +124,12 @@ void roundTile(const RoundSpec& s, int tx, int ty, uint32_t seed, uint8_t* fg, u
   if (dx > r2 || dx < -r2 || dy > r2 || dy < -r2) return;  // also keeps d2 far from overflow
   const int d2 = dx * dx + dy * dy;
   if (d2 > r2 * r2) return;
-  const int depth = (r2 - isqrt(d2)) / 2;
-  if (depth == 0) { *fg = kGenGrass; return; }
+  const int q = r2 - isqrt(d2);  // doubled units from the tile centre to the rim
+  if (q <= 2) { *fg = kGenGrass; return; }  // within one tile of the rim: every tile touching air is grass
+  const int depth = q / 2;  // tiles below the rim, rounded down (ore, deep ore and wall layers use this)
   *wall = depth < 8 ? kGenWallDirt : kGenWallStone;
   const int ang = pseudoAngle(dx, dy);
-  if (depth <= 1 + (int)(hash(seed, kSaltRoundDirt, ang >> 2, 0) & 1)) { *fg = kGenDirt; return; }
+  if (q <= 4 + 2 * (int)(hash(seed, kSaltRoundDirt, ang >> 2, 0) & 1)) { *fg = kGenDirt; return; }  // 1-2 tiles under the grass
   *fg = kGenStone;
   const uint32_t r = hash(seed, kSaltRoundOre, tx, ty);
   const bool deep = depth >= 2 * s.radius / 3 && ((r >> 8) & 15) == 0;

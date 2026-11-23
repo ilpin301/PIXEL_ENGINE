@@ -53,7 +53,9 @@ constexpr RoundSpec kAsteroid2Spec = {2, 29};   // 64 x 64 tiles
 
 // Reference per-tile form of roundGen: tile (tx, ty) in world coordinates, written to *fg and *wall. A tile outside the
 // grid or outside the disc is air in both layers, even if the radius is too large for the grid.
-// Layers by depth below the rim: grass, 1-2 dirt (patchy by direction), stone with ore zones by direction and depth.
+// Layers from the rim inwards: grass (every tile whose centre is within one tile of the rim, so every solid tile that
+// touches air), 1-2 dirt (patchy by direction), stone with ore zones by direction and depth (depth = whole tiles below
+// the rim, see docs/user/api-world.md).
 void roundTile(const RoundSpec& s, int tx, int ty, uint32_t seed, uint8_t* fg, uint8_t* wall);
 
 // Fills chunk (cx, cy) of the round world s (kChunkTiles bytes each for fg and wall, row-major); equals roundTile.

@@ -195,8 +195,11 @@ A disc in a square grid of chunks, as a pure integer function of (tile coords, s
 Rules for round worlds:
 
 - Disc: a tile is inside when its doubled-centre distance squared to the grid centre is <= `(2 * radius)^2`. A tile outside the disc or outside the grid is air (0) in both layers, even when `radius` is too large for the grid.
-- Foreground by depth below the rim: grass, 1-2 dirt (patchy by direction), stone, `kGenOre` from depth `radius / 6` and `kGenDeepOre` from depth `2 * radius / 3` in zones that depend on direction and depth. For `kPlanetSpec` these depths (10 and 40) equal `kGenOreMinDepth` and `kGenDeepOreMinDepth`.
-- Wall layer: `kGenWallDirt` for depth < 8, then `kGenWallStone`.
+- Depth: the distance of a tile centre from the rim in whole tiles, `(2 * radius - isqrt(d2)) / 2` with integer division, where `d2` is the doubled-centre distance squared of the disc rule and `isqrt` the floor square root. A tile just inside the rim has depth 0 or 1. Ore, deep ore and the wall layer use this depth.
+- Grass: every solid tile whose centre is within one tile of the rim (`2 * radius - isqrt(d2) <= 2`), so every solid tile with a 4-neighbour outside the disc is grass; where the rim runs diagonally a few tiles behind the edge are grass too. Grass has no wall.
+- Foreground below the grass: 1-2 dirt tiles (patchy by direction), then stone, `kGenOre` from depth `radius / 6` and `kGenDeepOre` from depth `2 * radius / 3` in zones that depend on direction and depth. For `kPlanetSpec` these depths (10 and 40) equal `kGenOreMinDepth` and `kGenDeepOreMinDepth`.
+- Ore is not guaranteed in asteroids: for some seeds an asteroid has no `kGenOre` or no `kGenDeepOre`; the planet preset (`kPlanetSpec`) always has both.
+- Wall layer (not under grass): `kGenWallDirt` for depth < 8, then `kGenWallStone`.
 - Gravity points toward the centre: right of it gives `Left`, below it gives `Up`. The larger axis offset wins; an exact diagonal tie goes to the vertical axis, and the centre itself gives `Down`.
 - `GenFn` has no context argument, so each wrapper has its size baked in. A game with another size calls `roundGen` with its own `RoundSpec` from its own `GenFn`.
 - Shortcuts (noted in the header): perfectly round surface (no hills), no caves, no core tile id (the innermost layer is stone or ore).

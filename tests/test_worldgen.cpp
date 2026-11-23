@@ -3,7 +3,10 @@
 // World (real terrain, collision on the surface, edits survive eviction and reload). Goldens were captured from the
 // implementation (seed 12345) and checked by eye on an ASCII dump, not derived independently.
 // S8.5 round tests (testRound*): expectations follow the disc spec (formulas in the tests); only the chunk goldens are captured.
+// S8.5 review fixes: grass band of one full tile, exact ore depth bounds, ore zone gate and wrap tests, ore at 64 seeds
+// (the zone-test thresholds and the seed range 1..64 are calibrated from measurements, see the comments at each test).
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -215,14 +218,36 @@ static void roundMap(const RoundSpec& s, uint32_t seed) {
     }
 }
 
+static int isqrtL(long n) {
+  int r = (int)std::sqrt((double)n);
+  while ((long)r * r > n) r--;
+  while ((long)(r + 1) * (r + 1) <= n) r++;
+  return r;
+}
+
+// Depth of tile (tx, ty) below the rim in whole tiles: (2R - floor(sqrt(d2))) / 2 with d2 from roundD2; -1 outside the disc.
+static int roundDepth(const RoundSpec& s, int tx, int ty) {
+  const long d2 = roundD2(s, tx, ty);
+  return d2 > sq(2L * s.radius) ? -1 : (2 * s.radius - isqrtL(d2)) / 2;
+}
+
+// Diamond pseudo-angle of a doubled-centre offset: 0..255 once around the centre, 64 per quadrant, 255 wraps to 0. The ore
+// zone noise has a lattice of 32 of these steps by 8 tiles of depth (noiseRing in worldgen.cpp).
+static int roundAngle(int dx, int dy) {
+  const int ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy, sum = ax + ay;
+  if (sum == 0) return 0;
+  if (dy >= 0) return dx >= 0 ? ay * 64 / sum : 64 + ax * 64 / sum;
+  return dx < 0 ? 128 + ay * 64 / sum : 192 + ax * 64 / sum;
+}
+
 static int testRoundDeterminism() {
-  // Golden checksums captured from the implementation (seed 12345), not derived independently.
-  CHECK(roundChunkHash(kPlanetSpec, 0, 0, 12345) == 3499892850u);
+  // Golden checksums captured from the implementation (seed 12345), not derived independently (regenerated for the one-tile grass band).
+  CHECK(roundChunkHash(kPlanetSpec, 0, 0, 12345) == 3393096901u);
   CHECK(roundChunkHash(kPlanetSpec, 1, 1, 12345) == 3415786110u);
   CHECK(roundChunkHash(kPlanetSpec, 2, 1, 12345) == 2910136831u);
-  CHECK(roundChunkHash(kPlanetSpec, 3, 3, 12345) == 677150627u);
-  CHECK(roundChunkHash(kAsteroid1Spec, 0, 0, 12345) == 1691173347u);
-  CHECK(roundChunkHash(kAsteroid2Spec, 1, 0, 12345) == 68697569u);
+  CHECK(roundChunkHash(kPlanetSpec, 3, 3, 12345) == 1600163915u);
+  CHECK(roundChunkHash(kAsteroid1Spec, 0, 0, 12345) == 1752265036u);
+  CHECK(roundChunkHash(kAsteroid2Spec, 1, 0, 12345) == 2276669784u);
   // Different prefilled buffers give identical output (all 2 x 1,024 bytes are written, no hidden state).
   uint8_t a[2][kChunkTiles], b[2][kChunkTiles];
   memset(a, 0xAA, sizeof(a));
@@ -302,7 +327,7 @@ static int testRoundOversize() {
   return 0;
 }
 
-// Shape of the whole map of s: disc, grass ring, dirt ring, wall layers, and the four axis rays (columns / rows G/2-1
+// Shape of the whole map of s: disc, grass ring (centre within one tile of the rim), dirt ring, wall layers, and the four axis rays (columns / rows G/2-1
 // and G/2, so one doubled offset is +-1; index i = tiles from the edge, scanned to the centre).
 static int checkRoundShape(const RoundSpec& s, uint32_t seed) {
   roundMap(s, seed);
@@ -311,14 +336,14 @@ static int checkRoundShape(const RoundSpec& s, uint32_t seed) {
     for (int tx = 0; tx < g; tx++) {
       const uint8_t f = g_rfg[ty * g + tx], w = g_rwall[ty * g + tx];
       const long d2 = roundD2(s, tx, ty);
-      const bool inside = d2 <= sq(r2), grass = inside && d2 >= sq(r2 - 1);
+      const bool inside = d2 <= sq(r2), grass = inside && d2 >= sq(r2 - 2);
       if (tx == 0 || ty == 0 || tx == g - 1 || ty == g - 1) CHECK(f == 0 && w == 0);
       CHECK((f != 0) == inside);
       CHECK((f == kGenGrass) == grass);
       if (!inside || grass) CHECK(w == 0);
       else CHECK(w == kGenWallDirt || w == kGenWallStone);
-      if (inside && d2 >= sq(r2 - 3) && d2 < sq(r2 - 1)) CHECK(f == kGenDirt && w == kGenWallDirt);  // depth 1
-      if (inside && d2 < sq(r2 - 5)) CHECK(f >= kGenStone && f <= kGenDeepOre);                         // depth >= 3
+      if (inside && d2 >= sq(r2 - 4) && d2 < sq(r2 - 2)) CHECK(f == kGenDirt && w == kGenWallDirt);  // 3-4 doubled units below the rim
+      if (inside && d2 < sq(r2 - 6)) CHECK(f >= kGenStone && f <= kGenDeepOre);                         // 7 or more: stone or ore
     }
   // On a ray the centre tile has d2 = (G-2i-1)^2 + 1, so the first solid tile (grass) is at i = G/2 - R.
   const int e0 = g / 2 - s.radius;
@@ -351,38 +376,127 @@ static int testRoundShape() {
   return 0;
 }
 
-// Every tile with fg == id must satisfy depth >= minDepth, i.e. d2 <= (2R - 2*minDepth)^2, plus one tile ring of
-// slack (+2 doubled units) in case the implementation rounds depth differently.
-static int checkOreDepth(const RoundSpec& s, uint8_t id, int minDepth) {
+// Ore depth rules (spec): ore only at depth >= R/6, deep ore only at depth >= 2R/3, depth as in roundDepth, no slack. With
+// wantRing the ore must also show up at its threshold depth: in the first ring (depth == minDepth) pooled over the seeds
+// and within the first two rings (minDepth, minDepth + 1) at seed 12345.
+static int checkOreDepth(const RoundSpec& s, uint8_t id, int minDepth, bool wantRing) {
   const int g = s.chunks * kChunkSize;
-  for (int ty = 0; ty < g; ty++)
-    for (int tx = 0; tx < g; tx++)
-      if (g_rfg[ty * g + tx] == id) CHECK(roundD2(s, tx, ty) <= sq(2 * s.radius - 2 * minDepth + 2));
+  const uint32_t seeds[] = {12345, 1, 2, 3};
+  long ring1 = 0, ring12 = 0;
+  for (uint32_t seed : seeds) {
+    roundMap(s, seed);
+    for (int ty = 0; ty < g; ty++)
+      for (int tx = 0; tx < g; tx++)
+        if (g_rfg[ty * g + tx] == id) {
+          const int d = roundDepth(s, tx, ty);
+          CHECK(d >= minDepth);
+          ring1 += d == minDepth;
+          if (seed == 12345) ring12 += d <= minDepth + 1;
+        }
+  }
+  if (wantRing) CHECK(ring1 > 0 && ring12 > 0);
   return 0;
 }
 
 static int testRoundOre() {
   roundMap(kPlanetSpec, 12345);
-  long ore = 0, deep = 0, quad[4] = {0, 0, 0, 0};
-  for (int ty = 0; ty < 128; ty++)
-    for (int tx = 0; tx < 128; tx++) {
-      const uint8_t f = g_rfg[ty * 128 + tx];
-      ore += f == kGenOre;
-      deep += f == kGenDeepOre;
-      if (f == kGenOre) quad[static_cast<int>(roundTileGravity(kPlanetSpec, tx, ty))]++;
-    }
-  CHECK(ore > 0 && deep > 0);
-  CHECK(!(quad[0] == quad[1] && quad[1] == quad[2] && quad[2] == quad[3]));  // ore zones depend on direction
   const uint32_t h = fnv(g_rwall, 128 * 128, fnv(g_rfg, 128 * 128));
-  for (const RoundSpec& s : kRoundSpecs) {  // ore from depth R/6, deep ore from depth 2R/3 (planet: 10 and 40)
+  for (int k = 0; k < 3; k++) {  // ore from depth R/6, deep ore from depth 2R/3 (planet: 10 and 40)
+    const RoundSpec& s = kRoundSpecs[k];
     roundMap(s, 12345);
     long o = 0, d = 0;  // every preset has both ids, so the depth checks below are not vacuous
     for (int i = 0; i < s.chunks * kChunkSize * s.chunks * kChunkSize; i++) { o += g_rfg[i] == kGenOre; d += g_rfg[i] == kGenDeepOre; }
     CHECK(o > 0 && d > 0);
-    if (checkOreDepth(s, kGenOre, s.radius / 6) || checkOreDepth(s, kGenDeepOre, 2 * s.radius / 3)) return 1;
+    const bool wantRing = k != 1;  // the 1x1 asteroid is too small to demand a ring
+    if (checkOreDepth(s, kGenOre, s.radius / 6, wantRing) || checkOreDepth(s, kGenDeepOre, 2 * s.radius / 3, wantRing)) return 1;
   }
   roundMap(kPlanetSpec, 2);
   CHECK(fnv(g_rwall, 128 * 128, fnv(g_rfg, 128 * 128)) != h);
+  return 0;
+}
+
+// Ore at 64 seeds (1..64): the planet has ore and deep ore at every seed. Asteroids without ore are allowed by design (user
+// decision 2026-11-23; measured over seeds 0..2000: the 2x2 asteroid lacks deep ore at 44 seeds, the 1x1 asteroid lacks ore at
+// 6 and deep ore at 417), so for them ore and deep ore only have to appear at some of the seeds.
+static int testRoundOreSeeds() {
+  int oreSeeds[3] = {0, 0, 0}, deepSeeds[3] = {0, 0, 0};
+  for (uint32_t seed = 1; seed <= 64; seed++)
+    for (int k = 0; k < 3; k++) {
+      const RoundSpec& s = kRoundSpecs[k];
+      roundMap(s, seed);
+      long o = 0, d = 0;
+      for (int i = 0; i < s.chunks * kChunkSize * s.chunks * kChunkSize; i++) { o += g_rfg[i] == kGenOre; d += g_rfg[i] == kGenDeepOre; }
+      if (k == 0) { CHECK(o > 0); CHECK(d > 0); }
+      oreSeeds[k] += o > 0;
+      deepSeeds[k] += d > 0;
+    }
+  for (int k = 1; k < 3; k++) { CHECK(oreSeeds[k] > 0); CHECK(deepSeeds[k] > 0); }
+  std::printf("test_worldgen: asteroids with ore / deep ore at 64 seeds: 1x1 %d / %d, 2x2 %d / %d\n", oreSeeds[1], deepSeeds[1], oreSeeds[2], deepSeeds[2]);
+  return 0;
+}
+
+// Ore zone gate (spec): ore needs a smooth noise over (pseudo-angle, depth) to be high, so on the planet (a) ore and deep
+// ore are clearly rarer than the hash-only rates among the eligible stone tiles (ore 1/8, deep ore 1/16; measured 4.6% and
+// 2.3% over these seeds, 12.5% and 6.1% with the gate removed), (b) whole zones (32 angle steps x 8 tiles of depth, with
+// at least 150 eligible tiles) have no ore at all (63 of 65 seeds; none without the gate), and (c) the zones wrap: the
+// 8 angle steps before the wrap (248..255) and after it (0..7) are open or closed together, per depth band (11 of 130
+// bands disagree; 61 of 130 when the zone noise does not wrap, as for independent zones).
+static int testRoundOreZones() {
+  const RoundSpec& s = kPlanetSpec;
+  const int g = s.chunks * kChunkSize, mo = s.radius / 6, md = 2 * s.radius / 3, nSeeds = 65;  // seeds 12345 and 1..64
+  long elig = 0, ore = 0, eligD = 0, deep = 0, wrapCmp = 0, wrapMis = 0;
+  int emptySeeds = 0;
+  for (int n = 0; n < nSeeds; n++) {
+    roundMap(s, n ? (uint32_t)n : 12345u);
+    long cel[8][8] = {}, cop[8][8] = {}, wl[8] = {}, wr[8] = {}, wle[8] = {}, wre[8] = {};
+    for (int ty = 0; ty < g; ty++)
+      for (int tx = 0; tx < g; tx++) {
+        const uint8_t f = g_rfg[ty * g + tx];
+        const int depth = roundDepth(s, tx, ty);
+        if (f < kGenStone || depth < mo) continue;  // ore-eligible: stone or ore from depth R/6
+        const int ang = roundAngle(2 * tx + 1 - g, 2 * ty + 1 - g), j = depth >> 3, open = f >= kGenOre;
+        if (depth < md) { elig++; ore += f == kGenOre; }
+        else { eligD++; deep += f == kGenDeepOre; }
+        cel[ang >> 5][j]++;
+        cop[ang >> 5][j] += open;
+        if (ang >= 248) { wle[j]++; wl[j] += open; }
+        else if (ang < 8) { wre[j]++; wr[j] += open; }
+      }
+    bool empty = false;
+    for (int a = 0; a < 8; a++)
+      for (int j = 0; j < 8; j++) empty = empty || (cel[a][j] >= 150 && cop[a][j] == 0);
+    emptySeeds += empty;
+    for (int j = 0; j < 8; j++)
+      if (wle[j] >= 40 && wre[j] >= 40) { wrapCmp++; wrapMis += (wl[j] > 0) != (wr[j] > 0); }
+  }
+  CHECK(elig > 0 && eligD > 0);
+  CHECK(ore * 100 < elig * 8 && ore * 100 > elig * 2);
+  CHECK(deep * 1000 < eligD * 45 && deep * 100 > eligD * 1);
+  CHECK(emptySeeds * 2 >= nSeeds);
+  CHECK(wrapCmp >= 64 && wrapMis * 4 <= wrapCmp);
+  return 0;
+}
+
+// Grass rule (spec): every solid tile with a 4-neighbour outside the disc (or outside the grid) is grass.
+static int testRoundGrass() {
+  const uint32_t seeds[] = {12345, 1, 0};
+  for (uint32_t seed : seeds)
+    for (const RoundSpec& s : kRoundSpecs) {
+      roundMap(s, seed);
+      const int g = s.chunks * kChunkSize;
+      long exposed = 0;
+      for (int ty = 0; ty < g; ty++)
+        for (int tx = 0; tx < g; tx++) {
+          if (roundDepth(s, tx, ty) < 0) continue;  // not solid
+          bool edge = false;
+          for (int k = 0; k < 4; k++) {
+            const int nx = tx + (k == 0) - (k == 1), ny = ty + (k == 2) - (k == 3);
+            edge = edge || nx < 0 || ny < 0 || nx >= g || ny >= g || roundDepth(s, nx, ny) < 0;
+          }
+          if (edge) { exposed++; CHECK(g_rfg[ty * g + tx] == kGenGrass); }
+        }
+      CHECK(exposed >= 2 * s.radius);  // not vacuous: the rim has a few tiles per radius step
+    }
   return 0;
 }
 
@@ -458,7 +572,10 @@ int main() {
   if (testRoundSeams()) return 1;
   if (testRoundOversize()) return 1;
   if (testRoundShape()) return 1;
+  if (testRoundGrass()) return 1;
   if (testRoundOre()) return 1;
+  if (testRoundOreSeeds()) return 1;
+  if (testRoundOreZones()) return 1;
   if (testRoundGravity()) return 1;
   if (testRoundThroughWorld()) return 1;
   printTiming();
