@@ -1,16 +1,25 @@
 // pge_f429_sandbox / pge_f429_sandbench: the sandbox example (examples/sandbox/game.h) on the F429 board.
 // SANDBOX_BENCH=1: scripted bot for 1860 ticks (60 warm-up + 1800 samples), then a summary in the debug log: timing,
 // RAM figures and chunk generation time. SANDBOX_BACKBUF=1: vsync back buffer. LED3 on init/run failure, LED4 after
-// a finished bench. The board has no storage backend yet (S6.2b later): the stubs below make mount() fail, so the
-// game shows "NO STORAGE" for SAVE / LOAD.
+// a finished bench. SANDBOX_USB=1 (pge_f429_sandbox): SAVE / LOAD go to sandbox.sav on a FAT32 USB stick in the USB USER
+// port (micro-USB OTG adapter), CPU at 168 MHz for the 48 MHz USB clock; the stick must be plugged in at power-up (mount
+// runs once at game start, waits up to 1.5 s for a device and 6 s for enumeration), else the game shows "NO STORAGE".
+// SANDBOX_USB=0 (pge_f429_sandbench): storage stubs, 180 MHz.
 #include <stdint.h>
 #include "pge/engine.h"
 #include "pge/hal/storage.h"
 #include "board.h"
 #include "game.h"
+#if SANDBOX_USB
+#include "ff.h"
+#include "pge_storage_fatfs.h"
+#endif
 
 #ifndef SANDBOX_BENCH
 #define SANDBOX_BENCH 0
+#endif
+#ifndef SANDBOX_USB
+#define SANDBOX_USB 0
 #endif
 #ifndef SANDBOX_BACKBUF
 #define SANDBOX_BACKBUF 1
@@ -23,6 +32,7 @@
 #endif
 
 extern "C" {
+#if !SANDBOX_USB
 int pge_hal_storage_mount(void) { return -4; }
 int pge_hal_storage_open(const char*, int, pge_file*) { return -4; }
 int32_t pge_hal_storage_read(pge_file, void*, uint32_t) { return -4; }
@@ -30,10 +40,14 @@ int32_t pge_hal_storage_write(pge_file, const void*, uint32_t) { return -4; }
 int pge_hal_storage_close(pge_file) { return -4; }
 int pge_hal_storage_rename(const char*, const char*) { return -4; }
 int pge_hal_storage_remove(const char*) { return -4; }
+#endif
 extern uint32_t _sdata[], _edata[], _sbss[], _ebss[], _end[], _estack[];  // linker script
 }
 
 static SandboxGame g_game;
+#if SANDBOX_USB
+static FATFS g_fs;
+#endif
 
 #if SANDBOX_BENCH
 // Time ensureLoaded() on every chunk that is not resident after the run: one 4x4 px rect inside the chunk, so exactly
@@ -71,7 +85,12 @@ int main() {
   uint32_t sp;
   __asm volatile("mov %0, sp" : "=r"(sp));
   for (uint32_t* p = _end; p < reinterpret_cast<uint32_t*>(sp - 512); p++) *p = 0xA5A5A5A5u;
+#if SANDBOX_USB
+  pge_board_init_ex(1);
+  pge_fatfs_storage_bind(&g_fs, "");   // only stores the pointer; mount() runs in onCreate
+#else
   pge_board_init();
+#endif
   pge_f429_set_opts(0, SANDBOX_BACKBUF);
   pge::Error err = pge::init();
   if (err == pge::Ok) {

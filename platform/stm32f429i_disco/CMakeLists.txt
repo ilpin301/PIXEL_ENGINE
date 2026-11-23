@@ -8,7 +8,7 @@ if(NOT EXISTS ${HAL}/Src/stm32f4xx_hal.c)
 endif()
 
 set(HAL_MODULES hal hal_adc hal_adc_ex hal_cortex hal_dma hal_dma2d hal_flash hal_flash_ex hal_gpio hal_i2c hal_ltdc hal_ltdc_ex
-                hal_pwr hal_pwr_ex hal_rcc hal_rcc_ex hal_sai hal_sai_ex hal_sdram hal_spi ll_fmc)
+                hal_pwr hal_pwr_ex hal_rcc hal_rcc_ex hal_sai hal_sai_ex hal_sdram hal_spi ll_fmc hal_hcd ll_usb)
 set(HAL_SOURCES)
 foreach(m ${HAL_MODULES})
   list(APPEND HAL_SOURCES ${HAL}/Src/stm32f4xx_${m}.c)
@@ -36,6 +36,19 @@ target_include_directories(pge_f429_hal PUBLIC
   ${PGE_CUBE_DIR}/Drivers/CMSIS/Include ${CMSIS_DEV}/Include ${HAL}/Inc ${BSP}
   ${PGE_CUBE_DIR}/Drivers/BSP/Components/Common ${PGE_CUBE_DIR}/Drivers/BSP/Components/ili9341
   ${PGE_CUBE_DIR}/Drivers/BSP/Components/stmpe811 ${PGE_CUBE_DIR}/Utilities/Fonts ${CMAKE_SOURCE_DIR}/hal/include)
+
+# USB stick saves (S8.1): ST USB Host library (MSC) + FatFs R0.12c from the Cube checkout + drivers/storage_fatfs. Linked only into pge_f429_sandbox; Cube/FatFs sources stay unwarned.
+set(USBH ${PGE_CUBE_DIR}/Middlewares/ST/STM32_USB_Host_Library)
+set(FATFS_SRC ${PGE_CUBE_DIR}/Middlewares/Third_Party/FatFs/src)
+add_library(pge_f429_usb STATIC
+  ${USBH}/Core/Src/usbh_core.c ${USBH}/Core/Src/usbh_ctlreq.c ${USBH}/Core/Src/usbh_ioreq.c ${USBH}/Core/Src/usbh_pipes.c
+  ${USBH}/Class/MSC/Src/usbh_msc.c ${USBH}/Class/MSC/Src/usbh_msc_bot.c ${USBH}/Class/MSC/Src/usbh_msc_scsi.c
+  ${FATFS_SRC}/ff.c ${FATFS_SRC}/option/unicode.c
+  usb_msc.c ${CMAKE_SOURCE_DIR}/drivers/storage_fatfs/storage_fatfs.cpp)   # not Cube's diskio.c / ff_gen_drv.c
+set_source_files_properties(usb_msc.c ${CMAKE_SOURCE_DIR}/drivers/storage_fatfs/storage_fatfs.cpp PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
+target_include_directories(pge_f429_usb PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${USBH}/Core/Inc ${USBH}/Class/MSC/Inc ${FATFS_SRC}
+                           ${CMAKE_SOURCE_DIR}/drivers/storage_fatfs)
+target_link_libraries(pge_f429_usb PUBLIC pge_f429_hal)
 
 set(LD ${CMAKE_CURRENT_SOURCE_DIR}/STM32F429ZITX_FLASH.ld)
 # One firmware image: elf + map + bin + hex + size, plus a flash_<name> target (openocd + ST-LINK, needs the board).
@@ -91,13 +104,19 @@ pge_f429_platformer(pge_f429_platformer flash_f429_platformer 0 1)
 pge_f429_platformer(pge_f429_platbench flash_f429_platbench 1 1)
 pge_f429_platformer(pge_f429_platbench_nobb flash_f429_platbench_nobb 1 0)
 
-# Sandbox example (S6.2b): one main source, compile-time switches SANDBOX_BENCH (autoplay + log summary) and SANDBOX_BACKBUF.
-function(pge_f429_sandbox tgt flash_tgt bench backbuf)
+# Sandbox example (S6.2b): one main source, compile-time switches SANDBOX_BENCH (autoplay + log summary), SANDBOX_BACKBUF and
+# SANDBOX_USB (USB stick saves, 168 MHz).
+function(pge_f429_sandbox tgt flash_tgt bench backbuf usb)
   add_executable(${tgt} ${CMAKE_SOURCE_DIR}/examples/f429/sandbox_main.cpp)
   target_include_directories(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/examples/sandbox)
-  target_compile_definitions(${tgt} PRIVATE SANDBOX_BENCH=${bench} SANDBOX_BACKBUF=${backbuf})
-  target_link_libraries(${tgt} PRIVATE pge_core pge_f429_hal)
+  target_compile_definitions(${tgt} PRIVATE SANDBOX_BENCH=${bench} SANDBOX_BACKBUF=${backbuf} SANDBOX_USB=${usb})
+  if(usb)
+    target_link_libraries(${tgt} PRIVATE pge_core pge_f429_usb pge_f429_hal)
+  else()
+    target_link_libraries(${tgt} PRIVATE pge_core pge_f429_hal)
+  endif()
   pge_f429_firmware(${tgt} ${flash_tgt})
 endfunction()
-pge_f429_sandbox(pge_f429_sandbox flash_f429_sandbox 0 1)
-pge_f429_sandbox(pge_f429_sandbench flash_f429_sandbench 1 1)
+pge_f429_sandbox(pge_f429_sandbox flash_f429_sandbox 0 1 1)
+# bench keeps the storage stubs and 180 MHz so stage6.md numbers stay comparable
+pge_f429_sandbox(pge_f429_sandbench flash_f429_sandbench 1 1 0)

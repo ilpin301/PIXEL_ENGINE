@@ -27,6 +27,7 @@ A HAL configuration header based on ST's Cube template `stm32f4xx_hal_conf_templ
 
 - The 5x7 font glyphs in `core/src/gfx/font5x7.cpp` were drawn for this engine (comment in that file). They are not copied from another font.
 - `tests/fakes/ff.h`, `tests/fakes/lfs.h` and `tests/fakes/fake_fs.cpp` are test fakes written for this repository. They imitate a small API subset; no FatFs or LittleFS source is copied.
+- `platform/stm32f429i_disco/usb_msc.c`, `usbh_conf.h` and `ffconf.h` were written for this repository (S8.1); they implement the interfaces ST's USB Host library and FatFs expect (function and macro names are theirs), nothing copied from the `DOOM/` tree.
 - Nothing is copied from the reference repository's `DOOM/` tree (GPLv2). This is a project rule (K13).
 
 ## 2. Not bundled, but compiled and linked into the STM32F429I-DISCO firmware
@@ -37,13 +38,16 @@ The F429 build (`platform/stm32f429i_disco/CMakeLists.txt`) compiles these parts
 |---|---|---|---|
 | CMSIS core headers (`Drivers/CMSIS/Include`) | CMSIS | ARM Limited | Apache License 2.0 |
 | CMSIS device headers, `system_stm32f4xx.c`, `startup_stm32f429xx.s` (under `Drivers/CMSIS/Device/ST/STM32F4xx`) | CMSIS Device | ARM Limited - STMicroelectronics | Apache License 2.0 |
-| STM32F4 HAL drivers (`Drivers/STM32F4xx_HAL_Driver`: adc, cortex, dma, dma2d, flash, gpio, i2c, ltdc, pwr, rcc, sai, sdram, spi, fmc LL) | STM32F4 HAL | STMicroelectronics | BSD-3-Clause |
+| STM32F4 HAL drivers (`Drivers/STM32F4xx_HAL_Driver`: adc, cortex, dma, dma2d, flash, gpio, i2c, ltdc, pwr, rcc, sai, sdram, spi, hcd, fmc LL, usb LL) | STM32F4 HAL | STMicroelectronics | BSD-3-Clause |
 | BSP STM32F429I-Discovery (board, LCD, SDRAM, touch) | BSP STM32F429I-Discovery | STMicroelectronics | BSD-3-Clause |
 | BSP components (`stmpe811`, `ili9341`, common headers) | BSP Components | STMicroelectronics | BSD-3-Clause |
 | Fonts pulled in by the BSP LCD file (`Utilities/Fonts`) | STM32 Utilities | STMicroelectronics | BSD-3-Clause |
+| STM32 USB Host Library, Core + MSC class (`Middlewares/ST/STM32_USB_Host_Library`), only in `pge_f429_sandbox` | STM32_USB_Host_Library | STMicroelectronics | SLA0044 |
+| FatFs R0.12c (`Middlewares/Third_Party/FatFs/src`: `ff.c`, `option/unicode.c` with `ccsbcs.c`), only in `pge_f429_sandbox` | FatFS | ChaN - STMicroelectronics | BSD-3-Clause |
 
 Notes:
 
+- SLA0044 is ST's own licence, not an open-source licence. Going only by its name in the table (the text was not checked here), it typically limits use to ST devices; read the licence in your Cube checkout before redistributing a `pge_f429_sandbox` binary.
 - Startup and system files sit under `Drivers/CMSIS/Device`, so they are listed under the "CMSIS Device" row. The table does not name them individually, and their file headers were not read.
 - The Cube file `Drivers/CMSIS/LICENSE.txt` begins with the Apache License, Version 2.0 text (header lines checked), which matches the Apache 2.0 rows.
 - A firmware binary built from this repository contains that code. If you redistribute such a binary (`.elf`, `.bin`, `.hex`), the BSD-3-Clause and Apache-2.0 notices of these parts must accompany it. Take the exact notice texts from your own Cube checkout.
@@ -52,7 +56,7 @@ Notes:
 ## 3. Not bundled, optional or runtime dependencies
 
 - **SDL2** (host window, keyboard and audio). Not stored here. The host demos copy `SDL2.dll` next to the executables after the build (post-build step in `examples/*/CMakeLists.txt`), so a demo folder you hand to someone contains the DLL. SDL2 is under the zlib licence; verify this in your SDL2 package, which is not read or checked by this repository. Tests build and run without SDL2.
-- **FatFs** and **LittleFS**. `drivers/storage_fatfs` and `drivers/storage_littlefs` need them, but no source from either project is in this repository, and the tests use own fakes. Their licences are the vendors'; verify them when you add them. (The Cube table lists a FatFS entry as BSD-3-Clause, ChaN - STMicroelectronics; STATUS.md notes littlefs v2.9.3 as BSD-3. Neither is a statement about the version you add.) Neither library is linked into any firmware yet.
+- **FatFs** and **LittleFS**. `drivers/storage_fatfs` and `drivers/storage_littlefs` need them, but no source from either project is in this repository, and the tests use own fakes. Their licences are the vendors'; verify them when you add them. (The Cube table lists a FatFS entry as BSD-3-Clause, ChaN - STMicroelectronics; STATUS.md notes littlefs v2.9.3 as BSD-3. Neither is a statement about the version you add.) FatFs is now linked into the F429 firmware `pge_f429_sandbox` from the Cube checkout (see section 2); LittleFS is still not linked into any firmware.
 - **Pillow** (Python imaging library) is a runtime dependency of `tools/pge_assets.py`. It is not bundled; install it yourself and check its licence.
 
 ## 4. Not covered

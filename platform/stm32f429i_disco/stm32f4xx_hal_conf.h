@@ -13,6 +13,7 @@ extern "C" {
 #define HAL_DMA2D_MODULE_ENABLED
 #define HAL_FLASH_MODULE_ENABLED
 #define HAL_GPIO_MODULE_ENABLED
+#define HAL_HCD_MODULE_ENABLED
 #define HAL_I2C_MODULE_ENABLED
 #define HAL_LTDC_MODULE_ENABLED
 #define HAL_PWR_MODULE_ENABLED
@@ -38,6 +39,7 @@ extern "C" {
 
 #define USE_HAL_ADC_REGISTER_CALLBACKS     0U
 #define USE_HAL_DMA2D_REGISTER_CALLBACKS   0U
+#define USE_HAL_HCD_REGISTER_CALLBACKS     0U
 #define USE_HAL_I2C_REGISTER_CALLBACKS     0U
 #define USE_HAL_LTDC_REGISTER_CALLBACKS    0U
 #define USE_HAL_SAI_REGISTER_CALLBACKS     0U
@@ -53,6 +55,7 @@ extern "C" {
 #include "stm32f4xx_hal_adc.h"
 #include "stm32f4xx_hal_dma2d.h"
 #include "stm32f4xx_hal_flash.h"
+#include "stm32f4xx_hal_hcd.h"
 #include "stm32f4xx_hal_sdram.h"
 #include "stm32f4xx_hal_i2c.h"
 #include "stm32f4xx_hal_ltdc.h"

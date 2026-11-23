@@ -38,10 +38,20 @@
 | S7.1 | plan/PLAN-S7-docs-release.md | done 2026-11-17 (docs only; README + docs/user/{install,hardware,modules,examples,benchmarks,api-core,api-gfx,api-world,api-audio-storage,api-hal}.md; ESP-IDF install and ESP32-S3 wiring written as 'not implemented, deferred with S4.5'; ctest 31/31 on host) |
 | S7.2a | plan/PLAN-S7-docs-release.md | done 2026-11-17 (porting guide docs/user/porting.md; Tier B skeletons via cmake/tier_b.cmake + platform/tier_b: rp2040, rp2350, stm32h7, stm32f4_generic compile core + stub HAL with arm-none-eabi-g++ 10.3.1, not linked, untested; esp32 unbuilt, no Xtensa toolchain; host ctest 31/31, F429 scene still builds) |
 | S7.2b | plan/PLAN-S7-docs-release.md | done 2026-11-17 (platformio.ini native env verified: pio 6.2.0 build ok, program ran exit 0; .vscode/tasks.json and STM32CubeIDE notes untested, tools not installed; THIRD_PARTY_NOTICES.md, CHANGELOG.md, version 0.1.0; docs/user/wrappers.md; docs-only clean-copy test passed for host (ctest 31/31), F429 pge_f429_platformer cross build and rp2040 Tier B; the ESP32-S3 target of the done-when could not be tested, deferred with S4.5; git tag v0.1.0 created and published later) |
+| S8.1 | plan/PLAN-S8-orebelt-support.md | done 2026-11-23 (USB stick saves on the F429: pge_f429_sandbox flashed and verified, stick enumerated (usb: msc ready blocks=61067263, about 31 GB); Gate G7 passed by the user 2026-11-23; host ctest 31/31, build-f429 up to date) |
+| S8.2 | plan/PLAN-S8-orebelt-support.md | planned |
+| S8.3 | plan/PLAN-S8-orebelt-support.md | planned |
+| S8.4a | plan/PLAN-S8-orebelt-support.md | planned |
+| S8.4b | plan/PLAN-S8-orebelt-support.md | planned (board needed) |
+| S8.5 | plan/PLAN-S8-orebelt-support.md | planned |
+| S8.6 | plan/PLAN-S8-orebelt-support.md | planned (board + user needed, Gate G8) |
+| S8.7a | plan/PLAN-S8-orebelt-support.md | planned |
+| S8.7b | plan/PLAN-S8-orebelt-support.md | planned |
+| S8.8 | plan/PLAN-S8-orebelt-support.md | planned (Gate G9) |
 
 ## Resume point
 
-S7.2b done 2026-11-17. Releases v0.1.0 and v0.1.1 (docs/help EN/DE/RU and the examples/tutorial Coin Catcher targets) are tagged and published on GitHub. All sessions except S4.5 (deferred) are done. Next: user decides; resume S4.5 (ESP32-S3) only when the user says so. Uncommitted and the user's: docs/dev/tooling.md deletion, _done/, ttt.txt. Not done: ESP32-S3 install/wiring/build, board save media, audio board check, STM32CubeIDE and VS Code not run, tutorial not played by keyboard.
+S8.1 done 2026-11-23 (Gate G7 passed). Next: S8.2 (memory for a whole planet). Uncommitted and the user's: docs/dev/tooling.md deletion, _done/, ttt.txt. Tools: cmake/ctest are not on PATH; use "C:/Program Files/JetBrains/CLion/bin/cmake/win/x64/bin/cmake.exe" (and ctest.exe next to it); build-f429 = Release + Ninja (F429), build = host (ctest 31/31).
 
 ## Decision log (append-only)
 
@@ -86,6 +96,10 @@ S7.2b done 2026-11-17. Releases v0.1.0 and v0.1.1 (docs/help EN/DE/RU and the ex
 - 2026-11-16 S6.2 split (protocol rule 5, no Key decision changed): S6.2a host / S6.2b board. S6.2a built: examples/sandbox/game.h now has an 8-slot inventory (stack 99, selected slot, dig adds item, place consumes), tiles 6 BRICK / 7 FURNACE / 8 METAL, recipe table (BRICK 2 STONE+1 DIRT->2; FURNACE 8 STONE->1; METAL 3 ORE->1 needing a FURNACE tile within reach) with atomic craft + NoRoom rollback, modal menu on Select (recipes, SAVE, LOAD, OVERLAY; Left/Right pick hotbar slot; Select no longer toggles the overlay), HUD with ui::bar HP and ui::iconGrid hotbar (touch on a hotbar cell selects the slot), save/load through Storage + saveGame/loadGame with a 27-byte game blob validated as a trust boundary (version, length, item ids, counts, hp, position; invalid blob resets to a fresh state), storage I/O buffer 512 B (default 16384 does not fit the init arena), no autosave (R6); main.cpp flags --load, --save PATH. Tests in tests/test_sandbox.cpp: inventory, craft, menu, save/load incl. corrupt file, seed mismatch, hostile blobs; render with menu open. Results: ctest 31/31 (sandbox, sandbox_includes included), 2 mutation checks fail the test, ARM syntax-only compile of game.h 0 warnings, pge_sandbox --ticks 300 --shot ran (HP bar, hotbar visible; menu panel seen only via render test, not by eye). Not verified: anything on the board, NO STORAGE branch (host mount always succeeds), touch on hotbar, interactive play, menu look on screen, save on real media. Engine gaps found: none. Note: docs/dev/tooling.md appeared untracked, not created by this session.
 - 2026-11-17 S7.2b: no Key decision changed. Version bumped 0.0.1 -> 0.1.0 (version.h, version.cpp, test_version.cpp); tag not created (nothing committed; the user decides). PlatformIO is provided for the host native env only (F429 and ESP32-S3 stay CMake-only); .vscode/ is committed content, not ignored; .pio/ is ignored. Docs-only clean-copy test found PowerShell splitting an unquoted -DCMAKE_TOOLCHAIN_FILE=...cmake argument; docs, tasks.json and the tier_b README now quote it.
 - 2026-11-17 release: v0.1.0 tagged and published; v0.1.1 adds docs/help (EN/DE/RU) and the examples/tutorial Coin Catcher targets, version bumped 0.1.0 -> 0.1.1 (version.h, version.cpp, test_version.cpp). No Key decision changed.
+- 2026-11-21 Stage 8 planned (user approved): engine support for the OREBELT game, part file plan/PLAN-S8-orebelt-support.md, sessions S8.1-S8.8. No Key decision K1-K15 changed.
+- 2026-11-21 User decisions for OREBELT: prototype on STM32F429I-DISCO with saves on a FAT32 USB stick (USB OTG); ESP32-S3-WROOM-1-N16R8 may be the final handheld later (S4.5 stays deferred); planet = 4x4 grid of 32x32-tile chunks; tiles 8x8, characters about 16x24-16x32 (visual test in S8.6); round planets with option C (4 gravity directions by quadrant, camera turns in 90-degree steps, no free rotation); languages EN/RU/DE in settings; game time stops when the device is off, save on exit plus autosave. Belts, background jobs, quests stay game code, not engine.
+- 2026-11-23 S8.1: no Key decision changed. pge_f429_sandbox runs at 168 MHz (PLLN 336) instead of 180 MHz, because the USB OTG FS PHY needs 48 MHz from PLLQ and 360/7 = 51.4 MHz is out of spec; pge_board_init_ex(1) selects it, every other firmware keeps 180 MHz. USB host class handle comes from one static block (USBH_malloc -> pge_usbh_malloc), no heap (K5; map has 0 malloc/_sbrk). FatFs R0.12c with LFN 1 (static buffer) because save names like sandbox.sav.tmp are not 8.3; no RTC, files dated 2026-01-01. CTRL_SYNC sends SCSI SYNCHRONIZE CACHE (best effort). Limits: the USB host state machine is pumped only at mount (game start): stick must be in at power-up, no hot-plug; mount waits up to 1.5 s without a device, 6 s for enumeration; sticks with block size != 512 are refused. RAM of pge_f429_sandbox: data 39,416 + bss 85,032 B [measured from size output, 2026-11-23]. Cube ff.c gives one -Wstringop-overflow warning (vendor code, unwarned target, not investigated).
+- 2026-11-23 S8.1 board step and Gate G7 passed (user, on the board): flash_f429_sandbox verified OK, stick enumerated at power-up (usb: msc ready blocks=61067263); SAVE wrote sandbox.sav, LOAD after a power cycle restored the world, the user confirmed all steps work. The first LOAD after a power cycle was reported as not working, a repeat worked; no messages were recorded and the cause of the first failure was not found (possible: stick write cache not flushed before power off). No Key decision changed.
 
 ## Open questions
 
@@ -106,7 +120,7 @@ S7.2b done 2026-11-17. Releases v0.1.0 and v0.1.1 (docs/help EN/DE/RU and the ex
 - Fix 16.16 world-size limit (2,047 tiles at 16 px): acceptable for v1? Confirm at G2.
 - Change-log insert is O(n): measured in S5.1a, 0.4 us per insert at 4096 entries, kept.
 - Chunk generation time on the F429: host -O2 gives 57-96 us per chunk (S5.1b); the board measurement in S6.2 decides PGE_MAX_CHUNK_LOADS_PER_TICK (stays 1 until then).
-- DISCO USB-host MSC + FatFs storage backend assumed, not verified (S3).
+- DISCO USB-host MSC + FatFs storage backend: verified on the board 2026-11-23 (S8.1, Gate G7).
 - SDL2 install needed before S3.1a window; unit tests for S3.1a can run without it. (SDL2 2.32.10 installed, see docs/dev/toolchain.md.)
 - S4.3 board check: answered 2026-11-15, passed.
 - confirm USE_STM32F429I_DISCOVERY_REVD setting for this board (touch Y looked right to the user, so the default calibration is fine for this board)
@@ -137,7 +151,7 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S3 Lighting and environment effects | planned (optional; not done in S5.6, no cost measured) | S6+ if needed |
 | S3 Sound effects and music | implemented (host tested, real SDL playback heard by user 2026-11-16; F429 SAI backend compile-only) | S5.5 |
 | S3 Menus, HUD, UI | implemented (host only; widgets + MenuNav + debug overlay, S5.6) | S5.6 |
-| S3 Save/load | implemented (host only; embedded FatFs / LittleFS backends on fakes, S5.3b; on-board S6.2) | S5.3a |
+| S3 Save/load | implemented (host; F429 on a FAT32 USB stick, S8.1, G7 2026-11-23; LittleFS backend on fakes only) | S5.3a, S8.1 |
 | S3 Capability-based feature switching (K14) | implemented (config.h profile constants) | S4.1 |
 | S5 Pixels, lines, rectangles, filled rectangles, circles | implemented | S4.2a |
 | S5 Text rendering | implemented | S4.2a |
@@ -168,7 +182,7 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S6 Camera-based rendering | implemented (host + F429, board-checked) | S4.3 |
 | S6 Entity management, object pooling | implemented (host only) | S4.1 (pools), S5.2 |
 | S6 Compressed world storage (run-length) | implemented (host only; embedded FatFs / LittleFS backends on fakes, S5.3b; on-board S6.2) | S5.3a |
-| S6 External storage for worlds | incomplete (FatFs / LittleFS HAL backends written, host-tested on fakes; no diskio or block-device driver, no board check) | S5.3b, S6.2 |
+| S6 External storage for worlds | implemented for the F429 USB stick (FatFs + USB MSC diskio, S8.1, G7 2026-11-23); LittleFS block device not written | S5.3b, S8.1 |
 | S6 Game code separated from engine | implemented (examples/sandbox includes only pge/*.h, checked by ctest sandbox_includes) | S6.1 |
 | S7 GPIO buttons | implemented (host + F429, board-checked) | S4.3 |
 | S7 Joysticks | implemented (host + F429, board-checked) | S4.3 |
@@ -179,8 +193,8 @@ Seeded in S1.4 from spec sections 3, 5, 6, 7. Status values: planned / implement
 | S7 PWM and DAC audio | incomplete: not scheduled | documented in S7.2a; F429 options in 02 section 6 |
 | S7 I2S audio | incomplete (F429 SAI1 backend written, compile-only, no board run; ESP32-S3 I2S deferred with S4.5) | S5.5 |
 | S7 Sound effects, basic music, multiple channels | implemented (host only; mixer 8 channels, PCM8/PCM16, pattern music) | S5.5 |
-| S7 Internal flash, external SPI flash, SD card, LittleFS | incomplete (FatFs and LittleFS backends written, host-tested on fakes only; no SD / USB MSC / flash block-device drivers; LittleFS backend also run on real lfs.c over a RAM device in scratch) | S5.3b, S6.2 |
-| S7 Save games | implemented (host only; embedded FatFs / LittleFS backends on fakes, S5.3b; on-board S6.2) | S5.3a |
+| S7 Internal flash, external SPI flash, SD card, LittleFS | incomplete (USB stick via FatFs on the F429 done in S8.1; SD, internal / external flash and LittleFS block-device drivers not written; LittleFS backend run on real lfs.c over a RAM device in scratch only) | S5.3b, S8.1 |
+| S7 Save games | implemented (host; F429 on a FAT32 USB stick, S8.1, G7 2026-11-23; LittleFS backend on fakes only) | S5.3a, S8.1 |
 | S7 Configuration files | implemented (host only; embedded FatFs / LittleFS backends on fakes, S5.3b; on-board S6.2) | S5.3a |
 | S7 Asset loading, unified resource interface | implemented (host only; embedded FatFs / LittleFS backends on fakes, S5.3b; on-board S6.2; asset converters and blob checks implemented S5.4 (host)) | S5.3a, S5.4 |
 | S5 Asset tools (PNG to indexed sprite sheet, palette RGB565, CSV / Tiled tilemap, linker map memory report) | implemented (host tools; map report checked on the F429 platformer build) | S5.4 |

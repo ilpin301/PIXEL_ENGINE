@@ -76,8 +76,8 @@ void BusFault_Handler(void)   { fault_spin(); }
 void UsageFault_Handler(void) { fault_spin(); }
 
 /* ---- bring-up ----------------------------------------------------------------------------- */
-/* 180 MHz from 8 MHz HSE (same numbers as the Cube BSP example). */
-static void clock_config(void) {
+/* 180 MHz from 8 MHz HSE (same numbers as the Cube BSP example); usb48: 168 MHz, PLLQ 336/7 = 48 MHz. */
+static void clock_config(int usb48) {
   RCC_OscInitTypeDef osc = {0};
   RCC_ClkInitTypeDef clk = {0};
 
@@ -89,7 +89,7 @@ static void clock_config(void) {
   osc.PLL.PLLState = RCC_PLL_ON;
   osc.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   osc.PLL.PLLM = 8;
-  osc.PLL.PLLN = 360;
+  osc.PLL.PLLN = usb48 ? 336 : 360;
   osc.PLL.PLLP = RCC_PLLP_DIV2;
   osc.PLL.PLLQ = 7;
   if (HAL_RCC_OscConfig(&osc) != HAL_OK) fault_spin();
@@ -103,9 +103,9 @@ static void clock_config(void) {
   if (HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_5) != HAL_OK) fault_spin();
 }
 
-void pge_board_init(void) {
+void pge_board_init_ex(int usb48) {
   HAL_Init();
-  clock_config();
+  clock_config(usb48);
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   DWT->CYCCNT = 0;
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
@@ -114,6 +114,8 @@ void pge_board_init(void) {
   BSP_LED_Init(LED3);
   BSP_LED_Init(LED4);
 }
+
+void pge_board_init(void) { pge_board_init_ex(0); }
 
 uint32_t pge_board_sysclk_hz(void) { return SystemCoreClock; }
 void pge_board_delay_ms(uint32_t ms) { HAL_Delay(ms); }

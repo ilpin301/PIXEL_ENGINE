@@ -5,6 +5,7 @@ extern "C" {
 #endif
 
 void     pge_board_init(void);                  /* HAL, 180 MHz clock, DWT, SysTick, LEDs */
+void     pge_board_init_ex(int usb48);          /* usb48 != 0: 168 MHz so PLLQ gives the 48 MHz the USB OTG FS PHY needs (180 MHz gives 51.4 MHz) */
 uint32_t pge_board_sysclk_hz(void);
 void     pge_board_delay_ms(uint32_t ms);       /* HAL_Delay */
 void     pge_board_led(int which, int on);      /* which: 3 (red, error) or 4 (green, ok) */
