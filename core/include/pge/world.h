@@ -102,7 +102,7 @@ constexpr int kFlatSurfaceRow = 16;
 void flatGen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed);
 
 // Same semantics as moveAndCollide(const TileGrid&, ...) with tile size = World::tilePx() (square). Unloaded chunks
-// and the world boundary are solid.
-MoveResult moveAndCollide(const World& w, Body& b, int dx, int dy);
+// and the world boundary are solid. Gravity semantics of gd as for the TileGrid overload.
+MoveResult moveAndCollide(const World& w, Body& b, int dx, int dy, GravityDir gd = GravityDir::Down);
 
 }  // namespace pge

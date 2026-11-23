@@ -31,10 +31,11 @@ Tile property flags and tile-sweep collision for axis-aligned boxes. Tile map, b
 | `TileProps` | `uint16_t flags; uint8_t hardness; uint8_t light;` | per-tile-id properties; `flags` are `TileFlag` bits; `hardness` and `light` are carried for game code, collision only reads `flags` |
 | `TileGrid` | `const uint8_t* tiles; uint16_t w, h; uint8_t tile_w, tile_h; const TileProps* props;` | read-only tile map; `tiles` is row-major `w*h` tile ids; `w`, `h` in tiles; `tile_w`, `tile_h` in pixels, must be >= 1 (any value, not only powers of two); `props` is a table of 256 entries indexed by tile id |
 | `Body` | `int x, y; int w, h;` | axis-aligned box: top-left pixel position and size in world pixels; plain ints |
+| `GravityDir` | `enum class GravityDir : uint8_t` | `Down = 0, Left, Up, Right`; direction gravity pulls in; `Down` is the default |
 | `MoveResult` | `bool hit_x; bool hit_y; bool on_ground; uint16_t touched_flags;` | outcome of `moveAndCollide` |
 
-`MoveResult`: `hit_x` / `hit_y` = that axis move was stopped by a blocking tile; `on_ground` = a 1 px move down
-would be blocked (solid, or one-way whose top is at/below the box bottom); `touched_flags` = OR of the flags of
+`MoveResult`: `hit_x` / `hit_y` = that axis move was stopped by a blocking tile; `on_ground` = a 1 px move along
+gravity would be blocked (solid, or one-way met from its far side); `touched_flags` = OR of the flags of
 all tiles overlapped by the final box.
 
 ### Functions
@@ -42,7 +43,7 @@ all tiles overlapped by the final box.
 | Signature | Meaning |
 |---|---|
 | `uint16_t tileFlags(const TileGrid& g, int tx, int ty)` | flags of tile (tx, ty); any tile outside the grid reports `kTileSolid`, so the world boundary is solid in every direction |
-| `MoveResult moveAndCollide(const TileGrid& g, Body& b, int dx, int dy)` | moves `b` by (dx, dy), X axis first, then Y |
+| `MoveResult moveAndCollide(const TileGrid& g, Body& b, int dx, int dy, GravityDir gd = GravityDir::Down)` | moves `b` by (dx, dy), X axis first, then Y |
 
 `moveAndCollide` behaviour as stated in the header:
 
@@ -55,6 +56,9 @@ all tiles overlapped by the final box.
 - `kTileHazard` never blocks.
 - Precondition: `b` does not start overlapping a blocking tile. If it does, the call still terminates without
   out-of-bounds reads, but the snap may push the box back.
+- `gd` != `Down`: the sweep runs in a frame where `gd` points down. The axis across gravity moves first, then the
+  gravity axis; one-way tiles block only a body moving along `gd` onto their face that faces against `gd`;
+  `on_ground` probes 1 px along `gd`; `hit_x` / `hit_y` always name world axes. `Down` is the behaviour above.
 
 ## pge/world.h
 
@@ -125,7 +129,7 @@ logged edits for it; dropping a chunk from the cache never needs a write. Includ
 | Signature | Meaning |
 |---|---|
 | `void flatGen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed)` | placeholder generator: world row `kFlatSurfaceRow` is grass (1), rows below dirt (2), above air; wall layer is 3 below the surface row, 0 above; ignores seed |
-| `MoveResult moveAndCollide(const World& w, Body& b, int dx, int dy)` | same semantics as `moveAndCollide(const TileGrid&, ...)` with tile size = `World::tilePx()` (square); unloaded chunks and the world boundary are solid |
+| `MoveResult moveAndCollide(const World& w, Body& b, int dx, int dy, GravityDir gd = GravityDir::Down)` | same semantics as `moveAndCollide(const TileGrid&, ...)` with tile size = `World::tilePx()` (square); unloaded chunks and the world boundary are solid |
 
 ## pge/worldgen.h
 
@@ -188,8 +192,8 @@ allocated from an `Arena` in `init`; nothing else allocates. Includes `pge/colli
 | Type | Fields | Meaning |
 |---|---|---|
 | `Motion` | `int16_t vx, vy; uint8_t rx, ry;` | `vx`, `vy` in 8.8 px/tick; `rx`, `ry` are the sub-pixel remainder 0..255 carried between ticks |
-| `EntityMeta` | `uint8_t kind; uint8_t anim; uint16_t flags; uint16_t anim_t;` | `flags` are `EntityFlag` bits |
-| `PhysicsParams` | `int gravity; int max_fall;` | `gravity` in 8.8 per tick^2, >= 0; `max_fall` in 8.8 per tick, >= 0 |
+| `EntityMeta` | `uint8_t kind; uint8_t anim; uint16_t flags; uint16_t anim_t; GravityDir gravity_dir;` | `flags` are `EntityFlag` bits; `gravity_dir` is set by the game each tick, `Down` after spawn |
+| `PhysicsParams` | `int gravity; int max_fall;` | `gravity` in 8.8 per tick^2, >= 0; `max_fall` in 8.8 per tick, >= 0; both act along `EntityMeta::gravity_dir` (`max_fall` caps the speed along it only) |
 | `Health` | `int16_t hp, max_hp; uint8_t invuln_ticks; uint8_t flags;` | `invuln_ticks` is counted down by `update()`, also for bodies frozen in unloaded chunks; `flags` are `HealthFlag` |
 | `Event` | `EventType type; EntityId a; int16_t amount; uint8_t aux;` | notification only: `Health::hp` is authoritative; `aux` is the `kind` passed to `applyDamage` |
 
@@ -240,7 +244,7 @@ written by `update()`.
 | `uint16_t eventsDropped() const` | oldest events lost to a full queue (saturating) |
 | `uint16_t eventCount() const` | |
 | `template <class F> void forEach(F fn)` | `fn(EntityId, Body&)` for every live, non-dying entity (fresh ones included), ascending slot order |
-| `void update(const World& w, const PhysicsParams& p)` | gravity, sub-pixel motion and tile collision for live, non-dying, non-fresh slots in ascending order; a body overlapping an in-bounds chunk that is not loaded is frozen (velocity kept) |
+| `void update(const World& w, const PhysicsParams& p)` | gravity, sub-pixel motion and tile collision for live, non-dying, non-fresh slots in ascending order; a body overlapping an in-bounds chunk that is not loaded is frozen (velocity kept); gravity, on-ground and the sweep follow each body's `gravity_dir` |
 | `void endTick()` | despawns `hp <= 0` entities with `kHealthAutoReap`, frees dying slots (gen + 1), clears `kEntFresh` |
 | `void rebuildGrid(Rect active_px)` | indexes every live entity by the cell of its top-left corner, once per tick; entities whose cell lies outside `active_px` (or outside the `PGE_ENTITY_GRID_CELLS` budget) are not indexed |
 | `uint16_t queryOverlap(Rect r, EntityId* out, uint16_t cap) const` | live entities indexed by the last `rebuildGrid` whose `Body` strictly overlaps `r` (touching edges do not count); writes at most `cap` ids; order is deterministic (cell scan order) |

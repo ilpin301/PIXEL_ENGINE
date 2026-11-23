@@ -30,6 +30,7 @@ struct EntityMeta {
   uint8_t anim;
   uint16_t flags;  // EntityFlag bits
   uint16_t anim_t;
+  GravityDir gravity_dir;  // set by the game each tick; Down = 0 after spawn
 };
 
 // Low byte: engine opt-ins (0x04..0x80 free for games). 0x0100..0x0400: results written by update().
@@ -46,8 +47,8 @@ enum EntityFlag : uint16_t {
 };
 
 struct PhysicsParams {
-  int gravity;   // 8.8 per tick^2, >= 0
-  int max_fall;  // 8.8 per tick, >= 0
+  int gravity;   // 8.8 per tick^2 along EntityMeta::gravity_dir, >= 0
+  int max_fall;  // 8.8 per tick, >= 0, caps the speed along gravity_dir only
 };
 
 struct Health {
@@ -103,8 +104,9 @@ class Entities {
       if (link_[i] == kLive && !(meta_[i].flags & kEntDying)) fn(EntityId{i, gen_[i]}, body_[i]);
   }
 
-  // Gravity, sub-pixel motion and tile collision for live, non-dying, non-fresh slots in ascending order. A body
-  // overlapping an in-bounds chunk that is not loaded is frozen (velocity kept).
+  // Gravity, sub-pixel motion and tile collision for live, non-dying, non-fresh slots in ascending order; gravity,
+  // on-ground and the tile sweep follow each body's gravity_dir. A body overlapping an in-bounds chunk that is not
+  // loaded is frozen (velocity kept).
   void update(const World& w, const PhysicsParams& p);
   void endTick();  // despawns hp <= 0 entities with kHealthAutoReap, frees dying slots (gen + 1), clears kEntFresh
 

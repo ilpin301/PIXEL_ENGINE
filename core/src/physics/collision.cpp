@@ -59,6 +59,22 @@ struct WorldAcc {
   uint16_t flags(int tx, int ty) const { return (uint16_t)w.tileFlags(tx, ty); }
 };
 
+// Tile accessor of the gravity-down frame (u, v) over a world accessor: maps the local tile to the world tile.
+template <class G>
+struct FrameAcc {
+  const G& in;
+  GravityDir d;
+  int tile_w, tile_h;
+  uint16_t flags(int u, int v) const {
+    switch (d) {
+      case GravityDir::Up: return in.flags(u, -v - 1);
+      case GravityDir::Right: return in.flags(v, u);
+      case GravityDir::Left: return in.flags(-v - 1, u);
+      default: return in.flags(u, v);
+    }
+  }
+};
+
 template <class G>
 MoveResult moveImpl(const G& g, Body& b, int dx, int dy) {
   MoveResult res{false, false, false, 0};
@@ -105,14 +121,44 @@ MoveResult moveImpl(const G& g, Body& b, int dx, int dy) {
   return res;
 }
 
-}  // namespace
-
-MoveResult moveAndCollide(const TileGrid& g, Body& b, int dx, int dy) {
-  return moveImpl(GridAcc{g, g.tile_w, g.tile_h}, b, dx, dy);
+// Gravity-down sweep in a local frame: the body and move are rotated/mirrored so gravity points +y, swept by moveImpl,
+// then mapped back. Down (or any value outside 0..3) takes the unmapped path.
+template <class G>
+MoveResult moveDir(const G& g, Body& b, int dx, int dy, GravityDir d) {
+  const uint8_t k = (uint8_t)d;
+  if (k == 0 || k > 3) return moveImpl(g, b, dx, dy);
+  const bool swap = d != GravityDir::Up;
+  Body l;
+  int ldx, ldy;
+  switch (d) {
+    case GravityDir::Up: l = Body{b.x, -b.y - b.h, b.w, b.h}; ldx = dx; ldy = -dy; break;
+    case GravityDir::Right: l = Body{b.y, b.x, b.h, b.w}; ldx = dy; ldy = dx; break;
+    default: l = Body{b.y, -b.x - b.w, b.h, b.w}; ldx = dy; ldy = -dx; break;
+  }
+  MoveResult r = moveImpl(FrameAcc<G>{g, d, swap ? g.tile_h : g.tile_w, swap ? g.tile_w : g.tile_h}, l, ldx, ldy);
+  switch (d) {
+    case GravityDir::Up: b.x = l.x; b.y = -l.y - b.h; break;
+    case GravityDir::Right: b.x = l.y; b.y = l.x; break;
+    default: b.y = l.x; b.x = -l.y - b.w; break;
+  }
+  if (swap) {  // local x is world y
+    const bool t = r.hit_x;
+    r.hit_x = r.hit_y;
+    r.hit_y = t;
+  }
+  return r;
 }
 
-MoveResult moveAndCollide(const World& w, Body& b, int dx, int dy) {
-  return moveImpl(WorldAcc{w, w.tilePx(), w.tilePx()}, b, dx, dy);
+}  // namespace
+
+MoveResult moveAndCollide(const TileGrid& g, Body& b, int dx, int dy, GravityDir gd) {
+  const GridAcc acc{g, g.tile_w, g.tile_h};
+  return moveDir(acc, b, dx, dy, gd);
+}
+
+MoveResult moveAndCollide(const World& w, Body& b, int dx, int dy, GravityDir gd) {
+  const WorldAcc acc{w, w.tilePx(), w.tilePx()};
+  return moveDir(acc, b, dx, dy, gd);
 }
 
 }  // namespace pge

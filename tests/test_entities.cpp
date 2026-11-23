@@ -1,9 +1,11 @@
-// Entity tests (S5.2): pool/handles, deferred despawn, fresh skip, gravity + tile collision against a reference
-// trajectory, unloaded-chunk freeze, grid overlap queries vs a brute-force oracle, print-only update timing.
+// Entity tests (S5.2; 4-direction gravity S8.3): pool/handles, deferred despawn, fresh skip, gravity + tile collision
+// against a reference trajectory, unloaded-chunk freeze, grid overlap queries vs a brute-force oracle, print-only
+// update timing.
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <vector>
 #include "pge/entity.h"
 #include "pge/world.h"
@@ -31,20 +33,25 @@ static void initProps() {
 struct Env {
   Arena arena;
   World w;
-  Error init(int idx, int slots) {
+  Error init(int idx, int slots, GenFn gen = flatGen) {
     initProps();
     arena.init(g_wbuf[idx], sizeof(g_wbuf[idx]));
     WorldConfig c{};
     c.w_chunks = 4;
     c.h_chunks = 4;
     c.seed = 1;
-    c.gen = flatGen;
+    c.gen = gen;
     c.props = g_props;
     c.cache_slots = (uint16_t)slots;
     c.tile_px = 16;
     return w.init(c, arena);
   }
 };
+
+static void airGen(uint8_t* fg, uint8_t* wall, int, int, uint32_t) {
+  memset(fg, 0, kChunkTiles);
+  memset(wall, 0, kChunkTiles);
+}
 
 static uint32_t g_rng = 2463534242u;
 static uint32_t rnd() {  // xorshift32
@@ -279,6 +286,155 @@ static int testPhysics() {
   return 0;
 }
 
+// Gravity in all four directions. The test lives in a local frame (u, v) where gravity points +v and maps it to the
+// world with its own mapping (not the engine's); collision is mirror-symmetric, so the results must agree.
+static int testGravityDirs() {
+  const int O = 1024;  // frame origin in world px; the world is 2048 px square
+  const uint16_t fl = kEntGravity | kEntCollide;
+  for (int k = 0; k < 4; k++) {
+    const GravityDir d = (GravityDir)k;  // Down, Left, Up, Right
+    const GravityDir next = (GravityDir)((k + 1) & 3);
+    const uint16_t gf = (d == GravityDir::Down || d == GravityDir::Up) ? kEntHitY : kEntHitX;  // gravity axis
+    const uint16_t tf = gf == kEntHitY ? kEntHitX : kEntHitY;                                    // tangent axis
+
+    auto box = [&](int u, int v, int w, int h) {
+      switch (d) {
+        case GravityDir::Up: return Body{O - u - w, O - v - h, w, h};
+        case GravityDir::Right: return Body{O + v, O - u - w, h, w};
+        case GravityDir::Left: return Body{O - v - h, O - u - w, h, w};
+        default: return Body{O + u, O + v, w, h};
+      }
+    };
+    auto frameV = [&](const Body& b) {  // frame v of a world body's top edge
+      switch (d) {
+        case GravityDir::Up: return O - b.y - b.h;
+        case GravityDir::Right: return b.x - O;
+        case GravityDir::Left: return O - b.x - b.w;
+        default: return b.y - O;
+      }
+    };
+
+    Env e;
+    CHECK(e.init(0, 16, airGen) == Ok);
+    CHECK(e.w.ensureLoaded(Rect{0, 0, 2048, 2048}, 16) == 0);
+    auto tile = [&](int tu, int tv) {
+      const Body t = box(tu * 16, tv * 16, 16, 16);
+      return e.w.set(t.x / 16, t.y / 16, Layer::Fg, 1);
+    };
+    for (int tu = -8; tu < 8; tu++) CHECK(tile(tu, 6) == Ok);  // floor, top at v = 96
+    CHECK(tile(4, 5) == Ok);                                    // wall, face at u = 64
+    CHECK(tile(3, 2) == Ok);                                    // ceiling, bottom at v = 48
+
+    Arena a;
+    a.init(g_ebuf, sizeof(g_ebuf));
+    Entities en;
+    CHECK(en.init(a, 8) == Ok);
+    const Body s = box(-100, -40, 12, 20);
+    const EntityId id = en.spawn(0, s.x, s.y, (uint8_t)s.w, (uint8_t)s.h, fl);
+    CHECK(en.meta(id)->gravity_dir == GravityDir::Down);
+    en.meta(id)->gravity_dir = d;
+    en.endTick();
+    const PhysicsParams pp{64, 512};
+
+    auto setVel = [&](int fu, int fv) {
+      Motion* m = en.motion(id);
+      switch (d) {
+        case GravityDir::Up: m->vx = (int16_t)-fu; m->vy = (int16_t)-fv; break;
+        case GravityDir::Right: m->vx = (int16_t)fv; m->vy = (int16_t)-fu; break;
+        case GravityDir::Left: m->vx = (int16_t)-fv; m->vy = (int16_t)-fu; break;
+        default: m->vx = (int16_t)fu; m->vy = (int16_t)fv; break;
+      }
+    };
+    auto frameVel = [&](int& fu, int& fv) {
+      const Motion* m = en.motion(id);
+      switch (d) {
+        case GravityDir::Up: fu = -m->vx; fv = -m->vy; break;
+        case GravityDir::Right: fu = -m->vy; fv = m->vx; break;
+        case GravityDir::Left: fu = -m->vy; fv = -m->vx; break;
+        default: fu = m->vx; fv = m->vy; break;
+      }
+    };
+    auto at = [&](int u, int v) {  // body equals the frame box (u, v, 12, 20)
+      const Body w = box(u, v, 12, 20);
+      const Body* b = en.body(id);
+      return b->x == w.x && b->y == w.y && b->w == w.w && b->h == w.h;
+    };
+    auto tick = [&](const PhysicsParams& p) {
+      en.update(e.w, p);
+      en.endTick();
+      return en.meta(id)->flags;
+    };
+    int fu = 0, fv = 0;
+
+    // A: fall and land.
+    bool landed = false, maxed = false;
+    for (int t = 0; t < 400 && !landed; t++) {
+      landed = (tick(pp) & kEntOnGround) != 0;
+      frameVel(fu, fv);
+      CHECK(fv <= 512);
+      if (fv == 512) maxed = true;
+    }
+    CHECK(landed && maxed);
+    CHECK(at(-100, 76));
+    CHECK(en.meta(id)->flags & gf);
+    frameVel(fu, fv);
+    CHECK(fv == 0);
+    for (int t = 0; t < 20; t++) {
+      CHECK(tick(pp) & kEntOnGround);
+      CHECK(at(-100, 76));
+    }
+
+    // Gravity turned a quarter: nothing is under the body that way, so on-ground must clear.
+    en.meta(id)->gravity_dir = next;
+    CHECK(!(tick(PhysicsParams{0, 0}) & kEntOnGround));
+    CHECK(at(-100, 76));
+    en.meta(id)->gravity_dir = d;
+    CHECK(tick(pp) & kEntOnGround);
+
+    // B: jump in open sky.
+    setVel(0, -1024);
+    int min_v = 1 << 30;
+    bool down = false;
+    for (int t = 0; t < 200 && !down; t++) {
+      const uint16_t f = tick(pp);
+      if (t == 0) CHECK(!(f & kEntOnGround));
+      const int v = frameV(*en.body(id));
+      if (v < min_v) min_v = v;
+      down = (f & kEntOnGround) != 0;
+    }
+    CHECK(down && min_v < 76 - 20);
+    CHECK(at(-100, 76));
+
+    // C: walk along the surface into the wall.
+    setVel(256, 0);
+    bool wall = false;
+    for (int t = 0; t < 400 && !wall; t++) {
+      const uint16_t f = tick(pp);
+      CHECK(f & kEntOnGround);
+      CHECK(frameV(*en.body(id)) == 76);
+      wall = (f & tf) != 0;
+    }
+    CHECK(wall && at(52, 76));
+    frameVel(fu, fv);
+    CHECK(fu == 0);
+
+    // D: jump into the ceiling, then fall back.
+    setVel(0, -1024);
+    bool bonk = false;
+    for (int t = 0; t < 50 && !bonk; t++) {
+      const uint16_t f = tick(pp);
+      bonk = (f & gf) && !(f & kEntOnGround);
+    }
+    CHECK(bonk && at(52, 48));
+    frameVel(fu, fv);
+    CHECK(fv == 0);
+    down = false;
+    for (int t = 0; t < 200 && !down; t++) down = (tick(pp) & kEntOnGround) != 0;
+    CHECK(down && at(52, 76));
+  }
+  return 0;
+}
+
 static bool overlap(const Body& b, const Rect& r) {
   return b.x < r.x + r.w && r.x < b.x + b.w && b.y < r.y + r.h && r.y < b.y + b.h;
 }
@@ -407,6 +563,7 @@ int main() {
   rc |= testExhaustion();
   rc |= testOrderAndDeferral();
   rc |= testPhysics();
+  rc |= testGravityDirs();
   rc |= testTouching();
   rc |= testQueryOracle();
   if (rc) return 1;

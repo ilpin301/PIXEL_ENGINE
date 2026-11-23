@@ -59,7 +59,7 @@ EntityId Entities::spawn(uint8_t kind, int x, int y, uint8_t w, uint8_t h, uint1
   link_[i] = kLive;
   body_[i] = Body{x, y, w, h};
   mot_[i] = Motion{0, 0, 0, 0};
-  meta_[i] = EntityMeta{kind, 0, (uint16_t)((flags & ~kInternalFlags) | kEntFresh), 0};
+  meta_[i] = EntityMeta{kind, 0, (uint16_t)((flags & ~kInternalFlags) | kEntFresh), 0, GravityDir::Down};
   if (++size_ > counters_.high) counters_.high = size_;
   return EntityId{i, gen_[i]};
 }
@@ -147,10 +147,13 @@ void Entities::update(const World& w, const PhysicsParams& p) {
     if (frozen) continue;
 
     if (m.flags & kEntGravity) {
-      int vy = v.vy + p.gravity;
-      if (vy > p.max_fall) vy = p.max_fall;
-      if (vy > INT16_MAX) vy = INT16_MAX;
-      v.vy = (int16_t)vy;
+      const GravityDir gd = m.gravity_dir;
+      const int s = (gd == GravityDir::Left || gd == GravityDir::Up) ? -1 : 1;
+      int16_t& comp = (gd == GravityDir::Left || gd == GravityDir::Right) ? v.vx : v.vy;
+      int f = s * comp + p.gravity;
+      if (f > p.max_fall) f = p.max_fall;
+      if (f > INT16_MAX) f = INT16_MAX;
+      comp = (int16_t)(s * f);
     }
     const int tot_x = v.rx + v.vx, tot_y = v.ry + v.vy;  // >> on negatives is arithmetic (floor) on the targets
     const int dx = tot_x >> 8, dy = tot_y >> 8;
@@ -159,7 +162,7 @@ void Entities::update(const World& w, const PhysicsParams& p) {
 
     m.flags &= (uint16_t)~kResultFlags;
     if (m.flags & kEntCollide) {
-      const MoveResult r = moveAndCollide(w, b, dx, dy);
+      const MoveResult r = moveAndCollide(w, b, dx, dy, m.gravity_dir);
       if (r.hit_x) { v.vx = 0; v.rx = 0; m.flags |= kEntHitX; }
       if (r.hit_y) { v.vy = 0; v.ry = 0; m.flags |= kEntHitY; }
       if (r.on_ground) m.flags |= kEntOnGround;
