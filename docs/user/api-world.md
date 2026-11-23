@@ -244,7 +244,7 @@ written by `update()`.
 | `uint16_t eventsDropped() const` | oldest events lost to a full queue (saturating) |
 | `uint16_t eventCount() const` | |
 | `template <class F> void forEach(F fn)` | `fn(EntityId, Body&)` for every live, non-dying entity (fresh ones included), ascending slot order |
-| `void update(const World& w, const PhysicsParams& p)` | gravity, sub-pixel motion and tile collision for live, non-dying, non-fresh slots in ascending order; a body overlapping an in-bounds chunk that is not loaded is frozen (velocity kept); gravity, on-ground and the sweep follow each body's `gravity_dir` |
+| `void update(const World& w, const PhysicsParams& p)` | gravity, sub-pixel motion and tile collision for live, non-dying, non-fresh slots in ascending order; a body overlapping an in-bounds chunk that is not loaded is frozen (velocity kept); gravity, on-ground and the sweep follow each body's `gravity_dir`; sub-pixel remainders floor in world axes, so with a sub-pixel gravity a body under Up or Left gravity moves its first pixel up to one tick earlier than under Down or Right (rest positions are the same) |
 | `void endTick()` | despawns `hp <= 0` entities with `kHealthAutoReap`, frees dying slots (gen + 1), clears `kEntFresh` |
 | `void rebuildGrid(Rect active_px)` | indexes every live entity by the cell of its top-left corner, once per tick; entities whose cell lies outside `active_px` (or outside the `PGE_ENTITY_GRID_CELLS` budget) are not indexed |
 | `uint16_t queryOverlap(Rect r, EntityId* out, uint16_t cap) const` | live entities indexed by the last `rebuildGrid` whose `Body` strictly overlaps `r` (touching edges do not count); writes at most `cap` ids; order is deterministic (cell scan order) |

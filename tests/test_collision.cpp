@@ -1,5 +1,6 @@
 // Collision tests: hand-built scenarios for tile sizes 8x8 and 10x12, then a randomized comparison of
-// moveAndCollide against an independent pixel-by-pixel oracle.
+// moveAndCollide against an independent pixel-by-pixel oracle, then Left/Up/Right gravity compared with the Down path
+// on a grid the test turns itself (S8.3).
 #include <cstdint>
 #include <cstdio>
 #include "pge/collision.h"
@@ -261,6 +262,75 @@ static int testRandom(int* cases_out) {
   return (bad != 0 || cases < kCases) ? 1 : 0;
 }
 
+// Left/Up/Right must equal the Down path run on a grid turned so that gravity points down. The turning below is
+// written independently of the engine's (different formulas per direction) so a shared mistake cannot hide.
+static int testRandomDirs(int* cases_out, int* oneway_out) {
+  const int kCases = 20000, W = 12, H = 10;
+  uint8_t buf[120], tbuf[120];
+  int cases = 0, attempts = 0, bad = 0, oneway = 0;
+  while (cases < kCases && attempts < 10 * kCases) {
+    attempts++;
+    const GravityDir d = attempts % 3 == 0 ? GravityDir::Left : attempts % 3 == 1 ? GravityDir::Up : GravityDir::Right;
+    const bool wide = (attempts & 1) != 0;  // non-square tiles half of the time
+    const int tw = wide ? 10 : 8, th = wide ? 12 : 8;
+    TileGrid g{buf, (uint16_t)W, (uint16_t)H, (uint8_t)tw, (uint8_t)th, g_props};
+    for (int i = 0; i < W * H; i++) {
+      const int v = rnd(8);
+      buf[i] = (uint8_t)(v < 5 ? 0 : v - 4);
+    }
+    const int Wpx = W * tw, Hpx = H * th;
+    Body b{0, 0, 1 + rnd(25), 1 + rnd(25)};
+    bool placed = false;
+    for (int t = 0; t < 50 && !placed; t++) {
+      b.x = rnd(Wpx - b.w + 1);
+      b.y = rnd(Hpx - b.h + 1);
+      placed = !oBlocking(g, b.x, b.y, b.w, b.h, false, 0);
+    }
+    if (!placed) continue;
+    const int dx = rnd(81) - 40, dy = rnd(81) - 40;
+
+    const bool up = d == GravityDir::Up, right = d == GravityDir::Right;
+    TileGrid t{tbuf, (uint16_t)W, (uint16_t)H, (uint8_t)tw, (uint8_t)th, g_props};
+    if (!up) {  // Left/Right swap the axes
+      t.w = (uint16_t)H;
+      t.h = (uint16_t)W;
+      t.tile_w = (uint8_t)th;
+      t.tile_h = (uint8_t)tw;
+    }
+    for (int tv = 0; tv < t.h; tv++)
+      for (int tu = 0; tu < t.w; tu++) {
+        const int tx = up ? W - 1 - tu : right ? tv : W - 1 - tv;
+        const int ty = up ? H - 1 - tv : H - 1 - tu;
+        tbuf[tv * t.w + tu] = buf[ty * W + tx];
+      }
+    Body f = up ? Body{Wpx - b.x - b.w, Hpx - b.y - b.h, b.w, b.h}
+          : right ? Body{Hpx - b.y - b.h, b.x, b.h, b.w}
+                  : Body{Hpx - b.y - b.h, Wpx - b.x - b.w, b.h, b.w};
+    const int fdx = up ? -dx : -dy, fdy = up ? -dy : right ? dx : -dx;
+    const MoveResult rr = moveAndCollide(t, f, fdx, fdy);
+    const int ex = up ? Wpx - f.x - f.w : right ? f.y : Wpx - f.y - f.h;
+    const int ey = up ? Hpx - f.y - f.h : Hpx - f.x - f.w;
+    const bool ehx = up ? rr.hit_x : rr.hit_y, ehy = up ? rr.hit_y : rr.hit_x;
+
+    const Body start = b;
+    Body bb = b;
+    const MoveResult r = moveAndCollide(g, bb, dx, dy, d);
+    cases++;
+    if (rr.on_ground && !oBlocking(t, f.x, f.y + 1, f.w, f.h, false, 0)) oneway++;
+    if (bb.x != ex || bb.y != ey || bb.w != b.w || bb.h != b.h || r.hit_x != ehx || r.hit_y != ehy ||
+        r.on_ground != rr.on_ground || r.touched_flags != rr.touched_flags) {
+      if (bad++ < 5)
+        std::printf("MISMATCH dir %d tile %dx%d box(%d,%d %dx%d) d(%d,%d): got (%d,%d) hx%d hy%d g%d t%d, "
+                    "want (%d,%d) hx%d hy%d g%d t%d\n",
+                    (int)d, tw, th, start.x, start.y, start.w, start.h, dx, dy, bb.x, bb.y, r.hit_x, r.hit_y,
+                    r.on_ground, r.touched_flags, ex, ey, ehx, ehy, rr.on_ground, rr.touched_flags);
+    }
+  }
+  *cases_out = cases;
+  *oneway_out = oneway;
+  return (bad != 0 || cases < kCases || oneway < 50) ? 1 : 0;
+}
+
 int main() {
   initProps();
   if (testScenarios(8, 8)) return 1;
@@ -270,6 +340,12 @@ int main() {
     std::printf("collision: random comparison FAILED (%d cases)\n", cases);
     return 1;
   }
-  std::printf("collision: scenarios 8x8 + 10x12 OK, %d random cases match the oracle\n", cases);
+  int dcases = 0, oneway = 0;
+  if (testRandomDirs(&dcases, &oneway)) {
+    std::printf("collision: gravity-direction comparison FAILED (%d cases)\n", dcases);
+    return 1;
+  }
+  std::printf("collision: scenarios 8x8 + 10x12 OK, %d random cases match the oracle, %d Left/Up/Right cases match "
+              "Down on a turned grid (%d on one-way ground)\n", cases, dcases, oneway);
   return 0;
 }
