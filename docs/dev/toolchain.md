@@ -118,3 +118,11 @@ Tiled JSON limits: one tileset, plain `data` list, no flip bits, no base64 / com
 - Host demo: `build/examples/platformer/pge_platformer.exe --overlay` (SELECT toggles the overlay).
 - Headless shot: `SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software build/examples/platformer/pge_platformer.exe --auto --overlay --ticks 120 --shot out.bmp`
 - Test: `ctest -R ui`
+## S8.4b rotation on the F429
+
+- B1 now has 14 items (rotated tile and sprite items) and prints about 22.7 KB per full run into the 32,768 B ring (check the log ends with "# B1 DONE" and pos < 32768).
+- Read the ring with openocd as in the F429 section, but give dump_image an absolute path and no quote characters around it (a relative or quoted path makes openocd fail with "couldn't open").
+- Orientation viewer firmware `pge_f429_orient` with `flash_f429_orient` (needs the board): shows the test picture in orient 0..3, 3 s each, log lines `orient=n`.
+- Baseline for S8.x board numbers is docs/benchmarks/raw/f429-head-s8.3.txt (f429.txt of S3.2b is outdated).
+- `flash_f429_sandbox` restores the sandbox firmware.
+

@@ -109,6 +109,11 @@ add_executable(pge_f429_planetmem ${CMAKE_SOURCE_DIR}/examples/f429/planetmem_ma
 target_link_libraries(pge_f429_planetmem PRIVATE pge_core pge_f429_hal)
 pge_f429_firmware(pge_f429_planetmem flash_f429_planetmem)
 
+# Orientation viewer (S8.4b): the test picture in 4 camera orientations, auto-cycling.
+add_executable(pge_f429_orient ${CMAKE_SOURCE_DIR}/examples/f429/orient_main.cpp)
+target_link_libraries(pge_f429_orient PRIVATE pge_core pge_f429_hal)
+pge_f429_firmware(pge_f429_orient flash_f429_orient)
+
 # Sandbox example (S6.2b): one main source, compile-time switches SANDBOX_BENCH (autoplay + log summary), SANDBOX_BACKBUF and
 # SANDBOX_USB (USB stick saves, 168 MHz).
 function(pge_f429_sandbox tgt flash_tgt bench backbuf usb)
