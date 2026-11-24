@@ -1,6 +1,6 @@
 # cmake -DPGE_ROOT=<repo root> -P check_includes.cmake
 # Fails if any #include in examples/sandbox/*.h|*.cpp is not "pge/<name>.h" (with <name>.h present in core/include/pge),
-# the game's own "game.h", or one of a few C/C++ std headers.
+# the game's own "game.h" or generated "game_text.h", or one of a few C/C++ std headers.
 if(NOT PGE_ROOT)
   get_filename_component(PGE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 endif()
@@ -20,7 +20,8 @@ foreach(f ${files})
       if(NOT EXISTS "${PGE_ROOT}/core/include/pge/${CMAKE_MATCH_1}")
         list(APPEND bad "${f}: ${l} (no core/include/pge/${CMAKE_MATCH_1})")
       endif()
-    elseif(inc MATCHES "^<(stdint\.h|string\.h|cstdio|cstdlib|cstring)>$" OR inc STREQUAL "\"game.h\"")
+    elseif(inc MATCHES "^<(stdint\.h|string\.h|cstdio|cstdlib|cstring)>$" OR inc STREQUAL "\"game.h\""
+           OR inc STREQUAL "\"game_text.h\"")
     else()
       list(APPEND bad "${f}: ${l}")
     endif()

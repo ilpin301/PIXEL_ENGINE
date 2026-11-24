@@ -1,5 +1,5 @@
-// Asset blob tests (S5.4): golden sprites / tileset / tilemap blobs, rejection of every malformed variant, and (when
-// the Python tool is available) byte-identity of the generated blobs with the goldens.
+// Asset blob tests (S5.4, S8.7b): golden sprites / tileset / tilemap / font / strings blobs, rejection of every
+// malformed variant, and (when the Python tool is available) byte-identity of the generated blobs with the goldens.
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -7,10 +7,13 @@
 #include "pge/asset.h"
 #include "pge/color.h"
 #include "pge/gfx.h"
+#include "pge/memory.h"
+#include "pge/settings.h"
 
 #ifdef PGE_HAVE_GEN
 #include "sample_font.h"
 #include "sample_sprites.h"
+#include "sample_strings.h"
 #include "sample_tilemap.h"
 #endif
 
@@ -45,6 +48,15 @@ alignas(4) static const uint8_t kFont2[40] = {
     0x50, 0x47, 0x45, 0x41, 0x02, 0x01, 0x00, 0x00, 0x1C, 0x00, 0x00, 0x00,
     0x03, 0x02, 0x41, 0x02, 0x01, 0x02, 0x16, 0x04, 0x01, 0x00, 0x02, 0x00, 0x30, 0x04, 0x02, 0x00, 0x03, 0x00,
     0x05, 0x07, 0x02, 0x05, 0x07, 0x01, 0x04, 0x03, 0x06, 0x02};
+
+// Strings blob (same bytes as the Python tool's GOLDEN_STRINGS): languages "en", "ru"; strings 0 = "Hi" / U+0414
+// U+0430, 1 = "Yo" / missing in "ru". Offsets from the blob start: nlang 12, reserved 13, nstr 14, codes 16..19, pool
+// offsets 20..35 (language-major: en 0, 1; ru 0, 1), pool 36..46.
+alignas(4) static const uint8_t kStrings[47] = {
+    0x50, 0x47, 0x45, 0x41, 0x07, 0x01, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00,
+    0x02, 0x00, 0x02, 0x00, 0x65, 0x6E, 0x72, 0x75,
+    0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x48, 0x69, 0x00, 0x59, 0x6F, 0x00, 0xD0, 0x94, 0xD0, 0xB0, 0x00};
 
 // Mutable aligned copy of a blob with spare room.
 struct Blob {
@@ -359,6 +371,132 @@ static int testFont() {
   return 0;
 }
 
+static Error parseStrings(const Blob& b) {
+  StringTable t;
+  return assetStrings(b.d, b.n, t);
+}
+
+static bool is(const char* a, const char* b) { return std::strcmp(a, b) == 0; }
+
+static int testStrings() {
+  StringTable t;
+  CHECK(assetStrings(kStrings, sizeof(kStrings), t) == Ok);
+  CHECK(t.nlang == 2 && t.count == 2 && t.pool_size == 11);
+  CHECK(t.codes == kStrings + 16 && t.offs == kStrings + 20 && t.pool == reinterpret_cast<const char*>(kStrings + 36));
+  CHECK(is(t.get(0, 0), "Hi") && is(t.get(0, 1), "Yo"));
+  CHECK(is(t.get(1, 0), "\xD0\x94\xD0\xB0"));
+  uint8_t cur = 0;  // the current language: switched at run time, the same ids give the other texts
+  CHECK(is(t.get(cur, 0), "Hi"));
+  cur = 1;
+  CHECK(is(t.get(cur, 0), "\xD0\x94\xD0\xB0"));
+  cur = 0;
+  CHECK(is(t.get(cur, 0), "Hi"));
+  CHECK(is(t.get(1, 1), "Yo"));  // missing in "ru": the first language
+  CHECK(is(t.get(0, 2), "") && is(t.get(2, 0), "") && is(t.get(255, 65535), ""));  // bad id / language: "", not nullptr
+  const StringTable none;
+  CHECK(none.get(0, 0) != nullptr && is(none.get(0, 0), "") && none.langIndex("en") == -1);
+  CHECK(t.langIndex("en") == 0 && t.langIndex("ru") == 1 && t.langIndex("de") == -1);
+  CHECK(t.langIndex(nullptr) == -1 && t.langIndex("e") == -1 && t.langIndex("") == -1 && t.langIndex("eng") == -1);
+  CHECK(t.langIndex("EN") == -1 && t.langIndex("ex") == -1 && t.langIndex("xn") == -1);
+
+  alignas(8) uint8_t abuf[512];  // a settings file picks the language: "lang = ru"
+  Arena arena;
+  arena.init(abuf, sizeof(abuf));
+  Settings st;
+  CHECK(st.init(arena, 4) == Ok);
+  st.parse("lang = ru\n", 10);
+  CHECK(t.langIndex(st.getStr("lang", "en")) == 1);
+  CHECK(t.langIndex(st.getStr("other", "en")) == 0);
+
+  const Blob b(kStrings, 47);
+  CHECK(parseStrings(b) == Ok);
+  Blob m = b;
+  m.d[4] = 6;  // type Tilemap
+  CHECK(parseStrings(m) == Corrupt);
+  CHECK(assetStrings(nullptr, 47, t) == InvalidArg);
+  m = b;
+  m.d[12] = 0;  // no language
+  CHECK(parseStrings(m) == Corrupt);
+  m.d[12] = 17;  // more than 16
+  CHECK(parseStrings(m) == Corrupt);
+  m.d[12] = 1;  // one language: the offsets would start in the second code and run into the pool
+  CHECK(parseStrings(m) == Corrupt);
+  m = b;
+  m.d[14] = 0;  // no strings
+  CHECK(parseStrings(m) == Corrupt);
+  m = b;
+  m.d[14] = 255;  // table larger than the payload
+  m.d[15] = 255;
+  CHECK(parseStrings(m) == Corrupt);
+  m = b;
+  m.d[13] = 1;  // reserved
+  CHECK(parseStrings(m) == Corrupt);
+  const uint8_t codes[][2] = {{16, 'E'}, {16, 0x60}, {16, 0x7B}, {19, '0'}, {17, 0}};  // not 'a'..'z'
+  for (const auto& c : codes) {
+    m = b;
+    m.d[c[0]] = c[1];
+    CHECK(parseStrings(m) == Corrupt);
+  }
+  m = b;
+  m.d[16] = 'a';  // the limits of the range are fine
+  m.d[17] = 'z';
+  CHECK(parseStrings(m) == Ok);
+  for (int i = 20; i < 28; i += 4) {  // language 0 must have no missing entry (id 0, then id 1)
+    m = b;
+    for (int k = 0; k < 4; k++) m.d[i + k] = 0xFF;
+    CHECK(parseStrings(m) == Corrupt);
+  }
+  m = b;
+  m.d[28] = 11;  // offset == pool size
+  CHECK(parseStrings(m) == Corrupt);
+  m.d[28] = 10;  // the last byte: an empty string
+  CHECK(parseStrings(m) == Ok);
+  CHECK(assetStrings(m.d, m.n, t) == Ok && is(t.get(1, 0), ""));
+  m = b;
+  m.d[31] = 0x80;  // a huge offset
+  CHECK(parseStrings(m) == Corrupt);
+  m = b;
+  m.d[46] = 1;  // the pool does not end with NUL
+  CHECK(parseStrings(m) == Corrupt);
+  m = b;
+  m.setSize(0);  // no payload at all
+  m.n = 12;
+  CHECK(parseStrings(m) == Corrupt);
+  m.setSize(4);  // header only: no pool byte
+  m.n = 16;
+  CHECK(parseStrings(m) == Corrupt);
+  m = b;
+  m.setSize(20);  // the offset table ends inside its bytes
+  m.n = 32;
+  CHECK(parseStrings(m) == Corrupt);
+  m = b;
+  m.setSize(24);  // all tables and no pool
+  m.n = 36;
+  CHECK(parseStrings(m) == Corrupt);
+  m = b;
+  m.n = 46;  // truncated copy: the payload is cut
+  CHECK(parseStrings(m) == Corrupt);
+  m = b;
+  m.n = 48;  // trailing bytes beyond the payload are fine
+  CHECK(parseStrings(m) == Ok);
+  alignas(4) uint8_t raw[64] = {};  // odd address: byte reads only, no alignment needed
+  std::memcpy(raw + 1, kStrings, 47);
+  CHECK(assetStrings(raw + 1, 47, t) == Ok && is(t.get(0, 1), "Yo"));
+
+  StringTable s;  // a rejected blob leaves out untouched, also when the violation is found last
+  s.pool = reinterpret_cast<const char*>(1);
+  s.nlang = 77;
+  s.count = 9;
+  m = b;
+  m.d[46] = 1;
+  CHECK(assetStrings(m.d, m.n, s) == Corrupt);
+  m = b;
+  m.d[28] = 11;
+  CHECK(assetStrings(m.d, m.n, s) == Corrupt);
+  CHECK(s.pool == reinterpret_cast<const char*>(1) && s.nlang == 77 && s.count == 9 && s.codes == nullptr);
+  return 0;
+}
+
 static int testTilemapRejects() {
   Blob b(kTilemap, 22);
   Blob m = b;
@@ -400,6 +538,11 @@ static int testGenerated() {
   char art[25];
   artOf(f, "AB\xD0\x96", art);
   CHECK(std::strcmp(art, "#.#..#..###." "###.#.#...#.") == 0);
+  CHECK(kSampleStrings_size == sizeof(kStrings));
+  CHECK(std::memcmp(kSampleStrings, kStrings, sizeof(kStrings)) == 0);
+  StringTable t;
+  CHECK(assetStrings(kSampleStrings, (uint32_t)kSampleStrings_size, t) == Ok);
+  CHECK(t.nlang == 2 && t.count == 2 && t.langIndex("ru") == 1 && is(t.get(1, 1), "Yo"));
 #else
   std::printf("test_asset: PGE_HAVE_GEN not defined, cross-language (Python tool) part skipped\n");
 #endif
@@ -413,6 +556,7 @@ int main() {
   if (testAtlas()) return 1;
   if (testTilemapRejects()) return 1;
   if (testFont()) return 1;
+  if (testStrings()) return 1;
   if (testGenerated()) return 1;
   std::printf("test_asset: all passed\n");
   return 0;

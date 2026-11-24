@@ -38,4 +38,25 @@ Error assetFont(const void* blob, uint32_t len, Font& out);
 struct TilemapView { uint16_t w, h; const uint8_t* tiles; };
 Error assetTilemap(const void* blob, uint32_t len, TilemapView& out);
 
+// Text table (type 7): the same strings in nlang languages, selected at run time. Zero-copy: every pointer points into
+// the blob, which must outlive the table. Language 0 is the fallback. The table never returns nullptr.
+struct StringTable {
+  const uint8_t* codes = nullptr;  // nlang x 2 bytes, lowercase letters ("en")
+  const uint8_t* offs = nullptr;   // nlang * count little-endian u32 pool offsets, language-major; 0xFFFFFFFF = missing
+  const char* pool = nullptr;      // NUL-terminated strings
+  uint32_t pool_size = 0;
+  uint8_t nlang = 0;
+  uint16_t count = 0;
+  // String id in language lang; missing there -> language 0. id >= count, lang >= nlang or an empty table -> "".
+  const char* get(uint8_t lang, uint16_t id) const;
+  // Index of a 2-letter language code (exact match), -1 for unknown, nullptr or a length other than 2.
+  int langIndex(const char* code) const;
+};
+
+// Payload: u8 nlang (1..16), u8 reserved (0), u16 nstr (>= 1); nlang x 2 code bytes ('a'..'z'); nlang * nstr x u32
+// pool offsets, language-major (index lang * nstr + id), 0xFFFFFFFF = missing (never in language 0); then the pool:
+// >= 1 byte, last byte 0, every offset < pool size. Byte reads only, so no alignment is needed. `out` is untouched on
+// error.
+Error assetStrings(const void* blob, uint32_t len, StringTable& out);
+
 }  // namespace pge

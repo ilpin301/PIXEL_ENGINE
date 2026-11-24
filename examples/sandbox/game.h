@@ -3,9 +3,12 @@
 // menu and save / load through the engine's storage layer. Only public "pge/..." headers are used (checked by
 // check_includes.cmake). The object must stay in place after onCreate (tilesets and the world point into it), so keep
 // it static. Edits live in the world's change log, so they survive chunk eviction and reload.
+// Menu and HUD message texts come from a text table (game_text.csv -> game_text.h by tools/pge_assets.py); the menu
+// item LANGUAGE cycles English / Russian / German and stores the choice in settings.txt.
 #pragma once
 #include <stdint.h>
 #include <string.h>
+#include "pge/asset.h"
 #include "pge/camera.h"
 #include "pge/collision.h"
 #include "pge/color.h"
@@ -13,11 +16,13 @@
 #include "pge/engine.h"
 #include "pge/entity.h"
 #include "pge/save.h"
+#include "pge/settings.h"
 #include "pge/sprite.h"
 #include "pge/storage.h"
 #include "pge/ui.h"
 #include "pge/world.h"
 #include "pge/worldgen.h"
+#include "game_text.h"
 
 class SandboxGame {
  public:
@@ -25,7 +30,7 @@ class SandboxGame {
     uint32_t n, sum_tick_us, sum_band_us, sum_flush_us, sum_frame_us, max_tick_us, max_band_us, max_frame_us;
   };
   static constexpr int kTile = 16, kMaxSlimes = 6, kSpawnCol = 512;
-  static constexpr int kSlots = 8, kStack = 99, kBlob = 27, kRecipes = 3, kMenuItems = 6;
+  static constexpr int kSlots = 8, kStack = 99, kBlob = 27, kRecipes = 3, kMenuItems = 7;
   enum : uint8_t { kBrick = 6, kFurnace = 7, kMetal = 8 };  // tile ids == item ids (1..5 are the generator's)
   enum CraftResult { CraftOk, CraftNeedItems, CraftNeedStation, CraftNoRoom, CraftBad };
 
@@ -36,6 +41,7 @@ class SandboxGame {
   uint16_t chunk_cache = 0;   // chunk cache slots, 0 = kDefaultCache (the profile default of 64 does not fit the arena)
   uint32_t change_cap = 2048; // change log entries (5 B each)
   const char* save_path = "sandbox.sav";
+  const char* settings_path = "settings.txt";  // "lang = xx"; read in onCreate, written by the LANGUAGE menu item
   bool load_on_start = false; // onCreate ends with loadFromStorage()
 
   pge::Error onCreate(pge::Engine& e) {
@@ -66,6 +72,19 @@ class SandboxGame {
     err = storage_.init(e.initArena(), 512);  // the LARGE default io buffer (16 KiB) does not fit the init arena
     if (err != Ok) return err;
     storage_ok_ = storage_.mount() == Ok;
+    err = assetStrings(kGameText, kGameText_size, text_);
+    if (err != Ok) return err;
+    lang_ = 0;
+    if (storage_ok_) {
+      Settings settings;
+      if (settings.init(e.initArena(), 4) != Ok) return OutOfMemory;
+      char buf[64];
+      if (settings.load(storage_, settings_path, buf, sizeof buf) == Ok) {
+        const int li = text_.langIndex(settings.getStr("lang", "en"));
+        if (li >= 0) lang_ = static_cast<uint8_t>(li);
+      }
+    }
+    applyLang();
     const int sx = kSpawnCol * kTile + 2, sy = surfaceY(kSpawnCol) - 14;
     load(Rect{sx - 448, 0, 896, 1024}, 16);  // the spawn area: 2 x 2 chunks, so slimes find their ground
     player_ = ent_.spawn(kKindPlayer, sx, sy, 12, 14, kEntGravity | kEntCollide);
@@ -132,7 +151,7 @@ class SandboxGame {
     ui::bar(c, style_, Rect{2, 22, 60, 8}, h ? static_cast<uint16_t>(h->hp > 0 ? h->hp : 0) : 0, h ? h->max_hp : 0,
             rgb(220, 40, 40));
     ui::label(c, style_, 66, 22, "HP");
-    if (msg_t_ > 0) ui::label(c, style_, 2, 32, kMsgs[msg_]);
+    if (msg_t_ > 0) ui::label(c, style_, 2, 32, message());
     uint16_t frames[kSlots];
     uint8_t counts[kSlots];
     for (int i = 0; i < kSlots; i++) {
@@ -142,8 +161,8 @@ class SandboxGame {
     }
     ui::iconGrid(c, style_, Rect{2, PGE_LOGICAL_H - 20, kSlots * 18, 18}, fg_icons_, frames, counts, kSlots, 1, sel_);
     if (menu_) {
-      ui::listMenu(c, style_, Rect{60, 50, 200, 54}, kMenuText, kMenuItems, nav_.selected);
-      ui::label(c, style_, 60, 108, "A:OK B:CLOSE L/R:SLOT");
+      ui::listMenu(c, style_, Rect{60, 50, 200, 63}, menu_text_, kMenuItems, nav_.selected);
+      ui::label(c, style_, 60, 117, text_.get(lang_, TXT_MENU_HELP));
     }
     if (overlay && eng_) drawOverlay(c, style_, eng_->stats(), kOverlayAll);
   }
@@ -346,7 +365,14 @@ class SandboxGame {
   uint32_t ticks() const { return ticks_; }
   bool logFull() const { return msg_t_ > 0 && msg_ == MsgLogFull; }
   bool menuOpen() const { return menu_; }
-  const char* message() const { return msg_t_ > 0 ? kMsgs[msg_] : ""; }  // HUD message, "" when expired
+  const char* message() const {  // HUD message in the current language, "" when expired
+    static_assert(TXT_MSG_NO_STORAGE - TXT_MSG_LOG_FULL == MsgNoStorage - MsgLogFull, "MSG_ rows follow the Msg enum");
+    if (msg_t_ == 0 || msg_ == MsgNone) return "";
+    return text_.get(lang_, static_cast<uint16_t>(TXT_MSG_LOG_FULL + msg_ - MsgLogFull));
+  }
+  uint8_t lang() const { return lang_; }  // index into the text table (0 = English)
+  const pge::StringTable& text() const { return text_; }
+  const char* menuItem(int i) const { return menu_text_[i]; }  // menu row text in the current language
   int cameraX() const { return cam_.x; }
   int surfaceY(int col) const { return pge::terrainHeight(col, seed) * kTile; }  // top pixel row of column col
 
@@ -354,11 +380,6 @@ class SandboxGame {
   enum { kKindPlayer = 0, kKindSlime = 1 };
   enum Msg : uint8_t { MsgNone, MsgLogFull, MsgInvFull, MsgCrafted, MsgNeedItems, MsgNeedFurnace, MsgNoRoom, MsgSaved,
                        MsgSaveFailed, MsgNoSave, MsgLoadFailed, MsgLoaded, MsgNoStorage };
-  static constexpr const char* const kMsgs[] = {"",        "LOG FULL", "INV FULL",    "CRAFTED",   "NEED ITEMS",
-                                                "NEED FURNACE", "NO ROOM", "SAVED",   "SAVE FAILED", "NO SAVE",
-                                                "LOAD FAILED",  "LOADED",  "NO STORAGE"};
-  static constexpr const char* const kMenuText[kMenuItems] = {
-      "BRICK: 2 STONE 1 DIRT", "FURNACE: 8 STONE", "METAL: 3 ORE (NEAR FURNACE)", "SAVE", "LOAD", "OVERLAY"};
   struct Slot { uint8_t item, count; };
   struct Recipe { uint8_t in_a, n_a, in_b, n_b, out, n_out, station; const char* name; };
   static constexpr Recipe kRecipeTable[kRecipes] = {
@@ -418,6 +439,24 @@ class SandboxGame {
     load(pge::Rect{cam_.x - kMargin, cam_.y - kMargin, cam_.view_w + 2 * kMargin, cam_.view_h + 2 * kMargin}, tries);
   }
 
+  // Menu rows in the current language: the TXT_MENU_ ids run in menu order.
+  void applyLang() {
+    static_assert(TXT_MENU_OVERLAY - TXT_MENU_BRICK + 1 == kMenuItems, "one TXT_MENU_ row per menu item");
+    for (int i = 0; i < kMenuItems; i++) menu_text_[i] = text_.get(lang_, static_cast<uint16_t>(TXT_MENU_BRICK + i));
+  }
+
+  // Next language (wraps) and the stored choice "lang = xx"; a failed write is ignored (the game keeps running).
+  void cycleLang() {
+    lang_ = static_cast<uint8_t>((lang_ + 1) % text_.nlang);
+    applyLang();
+    if (!storage_ok_) return;
+    char line[] = "lang = xx\n";
+    line[7] = static_cast<char>(text_.codes[2 * lang_]);
+    line[8] = static_cast<char>(text_.codes[2 * lang_ + 1]);
+    // shortcut: rewrites settings.txt with the lang key only, other keys are lost; merge through pge::Settings when a second key exists
+    storage_.writeFile(settings_path, line, sizeof line - 1);
+  }
+
   // Menu is open: Up / Down + A / Start via MenuNav, Left / Right cycle the hotbar slot, B closes.
   void menuInput(const pge::Input& in) {
     using pge::Button;
@@ -433,6 +472,8 @@ class SandboxGame {
     } else if (act == kRecipes + 1) {
       loadFromStorage();
     } else if (act == kRecipes + 2) {
+      cycleLang();
+    } else if (act == kRecipes + 3) {
       overlay = !overlay;
     }
   }
@@ -672,6 +713,7 @@ class SandboxGame {
   }
   static char* putU(char* o, uint32_t v) { return o + pge::ui::formatU32(o, 11, v); }
   void format() {
+    // shortcut: HUD tile names, "HP", "FPS", recipe names stay English; add them to game_text.csv if the HUD needs it.
     static const char* const kNames[kFgTiles] = {"-",     "GRASS", "DIRT",   "STONE",  "ORE",
                                                  "DEEP ORE", "BRICK", "FURNACE", "METAL"};
     char* o = put(hud_, "FPS ");
@@ -692,6 +734,8 @@ class SandboxGame {
   pge::World world_;
   pge::Entities ent_;
   pge::Storage storage_;
+  pge::StringTable text_;
+  const char* menu_text_[kMenuItems] = {};
   pge::EntityId player_ = pge::kNoEntity;
   Slime slimes_[kMaxSlimes] = {};
   pge::Camera cam_{0, 0, PGE_LOGICAL_W, PGE_LOGICAL_H, 32 * 32 * kTile, 4 * 32 * kTile};
@@ -711,6 +755,7 @@ class SandboxGame {
   uint8_t vis_fg_[kVisW * kVisH] = {}, vis_wall_[kVisW * kVisH] = {};
   Slot inv_[kSlots] = {};
   int8_t sel_ = 0;
+  uint8_t lang_ = 0;
   int tx_ = 0, ty_ = 0, face_ = 1;
   bool reach_ = false, blink_ = false, walk_ = false, menu_ = false, storage_ok_ = false;
   Msg msg_ = MsgNone;

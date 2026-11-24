@@ -6,7 +6,7 @@
 > - F429 firmware exists for scroller, platformer, audiodemo and sandbox (sources in `examples/f429/`).
 > - Sandbox: save/load verified on host only. On the F429 board SAVE and LOAD show NO STORAGE.
 > - Planet (S8.6a): host only; the board firmware comes in S8.6b.
-> - Game code in `examples/sandbox` may include only `"pge/<name>.h"`, `"game.h"` and a few std headers (`check_includes.cmake`).
+> - Game code in `examples/sandbox` may include only `"pge/<name>.h"`, `"game.h"`, the generated `"game_text.h"` and a few std headers (`check_includes.cmake`).
 > - Keys: arrows or WASD (Up/W, Down/S, Left/A, Right/D), Z/J = A, X/K = B, Enter = Start, Backspace or Right Shift = Select, Esc quits.
 
 ## Before you start
@@ -129,7 +129,7 @@ The host exe path for `empty`, `proto`, `gfxdemo` and `sandbox` follows the same
 
 ## sandbox (`pge_sandbox`)
 
-- **Shows:** a generated tile world (32 by 4 chunks, seeded; default seed 1234), a controllable character, digging and placing tiles within a 64 px reach limit, slimes, an 8-slot inventory with a hotbar HUD, a craft menu (BRICK, FURNACE, METAL) and save/load. Edits live in the world's change log, so they survive chunk eviction and reload.
+- **Shows:** a generated tile world (32 by 4 chunks, seeded; default seed 1234), a controllable character, digging and placing tiles within a 64 px reach limit, slimes, an 8-slot inventory with a hotbar HUD, a craft menu (BRICK, FURNACE, METAL), save/load and a LANGUAGE item (English, Russian, German; the choice is kept in `settings.txt`). Menu and message texts come from `examples/sandbox/game_text.csv`. Edits live in the world's change log, so they survive chunk eviction and reload.
 - **Host target:** `pge_sandbox` (`build/examples/sandbox/pge_sandbox.exe`).
 - **Flags:**
   - `--overlay`: start with the debug overlay on (also a menu item).
@@ -144,10 +144,10 @@ The host exe path for `empty`, `proto`, `gfxdemo` and `sandbox` follows the same
   - X digs the aimed tile into the inventory. Down aims below, Up aims above the head. Up without X also jumps.
   - Enter places the selected hotbar tile at the aimed spot.
   - Left mouse button digs the tile under the pointer (reach 64 px), or selects a hotbar slot if you click a hotbar cell.
-  - Select (Backspace or Right Shift) opens the menu. Up and Down choose an item. Z or Enter confirms. Left and Right pick the hotbar slot. X or Select closes the menu.
+  - Select (Backspace or Right Shift) opens the menu. Up and Down choose an item. Z or Enter confirms. Left and Right pick the hotbar slot. X or Select closes the menu. The LANGUAGE item cycles English, Russian and German.
   - Esc quits.
 - **Status:**
-  - Save and load are verified on the host only.
+  - Save and load are verified on the host only. The language choice is kept in `settings.txt` on the host; on the F429 board the game starts in English.
   - On the F429 board the storage stubs fail, so SAVE and LOAD show **NO STORAGE**.
 - **F429 firmware** (one source, `examples/f429/sandbox_main.cpp`):
   - `pge_f429_sandbox`: playable, vsync back buffer. Flash: `flash_f429_sandbox`.
@@ -219,7 +219,7 @@ Start from `examples/empty`, the smallest complete example.
 4. **Pick the platform.**
    - `pge_platform_host_null` for a headless build with no SDL, as `pge_empty` does.
    - `pge_platform_host` for a window (SDL2), as the other host examples do.
-5. **Keep includes public.** Game code includes only `"pge/<name>.h"` headers that exist in `core/include/pge/`, plus `"game.h"` for the game's own header, plus `<stdint.h>`, `<string.h>`, `<cstdio>`, `<cstdlib>` and `<cstring>`. `examples/sandbox/check_includes.cmake` enforces this for the files in `examples/sandbox/` only:
+5. **Keep includes public.** Game code includes only `"pge/<name>.h"` headers that exist in `core/include/pge/`, plus `"game.h"` for the game's own header (and `"game_text.h"` for its generated texts), plus `<stdint.h>`, `<string.h>`, `<cstdio>`, `<cstdlib>` and `<cstring>`. `examples/sandbox/check_includes.cmake` enforces this for the files in `examples/sandbox/` only:
 
    ```powershell
    cmake -DPGE_ROOT=F:/____IL_CPP/PIXEL_ENGINE -P examples/sandbox/check_includes.cmake

@@ -210,6 +210,7 @@ python tools/pge_assets.py sprites sheet.png --frame 16x16 [--atlas] [--type til
 python tools/pge_assets.py palette sheet.png --out-c pal.h --name kPal
 python tools/pge_assets.py tilemap level.csv|level.json [--layer NAME] --out-bin level.pgea --out-c level.h --name kLevel
 python tools/pge_assets.py font glyphs.png --frame 8x8 (--chars 'ABC abc 0123' | --chars-file F) [--spacing 1] --out-bin font.pgea --out-c font.h --name kFont
+python tools/pge_assets.py strings texts.csv [--prefix TXT_] --out-bin texts.pgea --out-c texts.h --name kTexts
 python tools/pge_assets.py selftest [--emit-dir DIR]
 ```
 
@@ -217,6 +218,7 @@ Notes:
 
 - Pixels are 8-bit indexed only (no 4 bpp packing). Palette is RGB565. Transparent is palette index 0.
 - Tiled JSON: one tileset, plain `data` list, no flip bits, no base64 or compression, no infinite maps. id = gid - firstgid + 1 (0 = air, 255 reserved). CSV ids are used as authored; negative values become 0.
+- `strings` reads a UTF-8 CSV: header `id,en,ru,...` (the first language is the fallback), one row per string, an empty cell in another language falls back to the first one. `--out-c` also writes an enum with `<PREFIX><ID>` and `<PREFIX>COUNT`. Example: `examples/sandbox/game_text.csv`.
 - `selftest` is also run by ctest (`tools_assets`).
 
 Memory report for a firmware image:

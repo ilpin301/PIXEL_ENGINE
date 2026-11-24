@@ -185,16 +185,27 @@ endif()
 if(pge_have_pil)
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_sprites.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h
-    ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_font.h
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_font.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_strings.h
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/pge_assets.py selftest --emit-dir ${CMAKE_CURRENT_BINARY_DIR}/gen
     DEPENDS ${CMAKE_SOURCE_DIR}/tools/pge_assets.py)
-  add_custom_target(pge_asset_gen DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_sprites.h
-    ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_font.h)
+  # The sandbox text table is regenerated from its CSV into the build dir; sandbox_text_gen compares it with the
+  # checked-in header, so game_text.h can never drift from game_text.csv.
+  add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen/game_text.h
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/pge_assets.py strings
+      ${CMAKE_SOURCE_DIR}/examples/sandbox/game_text.csv
+      --out-c ${CMAKE_CURRENT_BINARY_DIR}/gen/game_text.h --name kGameText --prefix TXT_
+    DEPENDS ${CMAKE_SOURCE_DIR}/tools/pge_assets.py ${CMAKE_SOURCE_DIR}/examples/sandbox/game_text.csv)
+  add_custom_target(pge_asset_gen ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_sprites.h
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_font.h
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_strings.h ${CMAKE_CURRENT_BINARY_DIR}/gen/game_text.h)
   add_dependencies(test_asset pge_asset_gen)
   target_include_directories(test_asset PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen)
   target_compile_definitions(test_asset PRIVATE PGE_HAVE_GEN)
   add_test(NAME tools_assets COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/pge_assets.py selftest)
   add_test(NAME tools_memreport COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/memreport.py --selftest)
+  add_test(NAME sandbox_text_gen COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/game_text.h ${CMAKE_SOURCE_DIR}/examples/sandbox/game_text.h)
 else()
   message(STATUS "Python3 with Pillow not found: asset tool tests and the cross-language check are skipped")
 endif()

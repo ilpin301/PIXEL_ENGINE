@@ -1,6 +1,6 @@
 // Sandbox tests (null host backend, no Engine::run): ground contact, dig / place rules, edit persistence across chunk
 // eviction (the S6.1 done-criterion), slime AI and damage, inventory, crafting, the menu, save / load (incl. a
-// hostile game blob) and render passes.
+// hostile game blob), the language menu item and render passes.
 #include <cstdio>
 #include <cstring>
 #include "game.h"
@@ -15,9 +15,14 @@
 
 static SandboxGame g_main, g_persist, g_ai, g_a, g_b, g_bot;  // large: keep off the stack
 
+// Every game in this file uses this settings file, never the default settings.txt, so a settings.txt in the cwd
+// cannot change the language under test.
+static const char* kLangFile = "test_sandbox_tmp_settings.txt";
+
 // Each game allocates its world from the init arena; free the previous game's share first.
 static pge::Error create(SandboxGame& g) {
   pge::engine().initArena().reset();
+  g.settings_path = kLangFile;
   return g.onCreate(pge::engine());
 }
 
@@ -469,6 +474,90 @@ static int testMenu() {
   return 0;
 }
 
+static bool streq(const char* a, const char* b) { return std::strcmp(a, b) == 0; }
+
+// The whole file is exactly `want`.
+static bool fileIs(const char* path, const char* want) {
+  char buf[32] = {};
+  std::FILE* f = std::fopen(path, "rb");
+  if (!f) return false;
+  const size_t n = std::fread(buf, 1, sizeof buf - 1, f);
+  std::fclose(f);
+  return n == std::strlen(want) && std::memcmp(buf, want, n) == 0;
+}
+
+static void putFile(const char* path, const char* text) {
+  std::FILE* f = std::fopen(path, "wb");
+  if (f) {
+    std::fputs(text, f);
+    std::fclose(f);
+  }
+}
+
+// Opens the menu and moves to the LANGUAGE item: Up from item 0 wraps to OVERLAY (the last), then LANGUAGE.
+static void toLanguageItem(Pad& pad, SandboxGame& g) {
+  pad.tick(g, PGE_BTN_SELECT);
+  pad.tick(g, 0);
+  for (int i = 0; i < 2; i++) {
+    pad.tick(g, PGE_BTN_UP);
+    pad.tick(g, 0);
+  }
+}
+
+// The LANGUAGE menu item cycles EN -> RU -> DE -> EN; menu rows and messages follow, the choice is stored in the
+// settings file and read again at the next start; every text fits the space it is drawn in.
+static int testLanguage() {
+  const char* const ru_save = "\xD0\xA1\xD0\x9E\xD0\xA5\xD0\xA0\xD0\x90\xD0\x9D\xD0\x98\xD0\xA2\xD0\xAC";  // RU: SAVE
+  const char* const ru_need = "\xD0\x9D\xD0\x95 \xD0\xA5\xD0\x92\xD0\x90\xD0\xA2\xD0\x90\xD0\x95\xD0\xA2";  // RU: NEED
+  const char* const en[7] = {"BRICK: 2 STONE 1 DIRT", "FURNACE: 8 STONE", "METAL: 3 ORE (NEAR FURNACE)", "SAVE", "LOAD",
+                             "LANGUAGE: ENGLISH", "OVERLAY"};
+  std::remove(kLangFile);
+  CHECK(standUp(g_ai) == 0);
+  SandboxGame& g = g_ai;
+  CHECK(g.lang() == 0 && g.text().nlang == 3);
+  for (int i = 0; i < 7; i++) CHECK(streq(g.menuItem(i), en[i]));
+  Pad pad;
+  toLanguageItem(pad, g);
+  CHECK(g.menuOpen());
+  pad.tick(g, PGE_BTN_A);  // EN -> RU
+  CHECK(g.lang() == 1 && !g.overlay && streq(g.menuItem(3), ru_save));
+  CHECK(fileIs(kLangFile, "lang = ru\n"));
+  CHECK(g.craft(0) == SandboxGame::CraftNeedItems);
+  CHECK(streq(g.message(), ru_need));
+  CHECK(renderOk(g, g_buf));  // the menu and the message draw in Russian
+  pad.tick(g, 0);
+  pad.tick(g, PGE_BTN_A);  // RU -> DE: the message that is still shown follows the language
+  CHECK(g.lang() == 2 && streq(g.menuItem(3), "SPEICHERN") && streq(g.message(), "ZU WENIG MATERIAL"));
+  CHECK(fileIs(kLangFile, "lang = de\n"));
+  CHECK(renderOk(g, g_buf));
+  // the stored language is read at the next start
+  CHECK(create(g) == pge::Ok && g.lang() == 2 && streq(g.menuItem(5), "SPRACHE: DEUTSCH"));
+  Pad pad2;
+  toLanguageItem(pad2, g);
+  pad2.tick(g, PGE_BTN_A);  // DE -> EN: the English texts are back, byte for byte
+  CHECK(g.lang() == 0 && fileIs(kLangFile, "lang = en\n"));
+  for (int i = 0; i < 7; i++) CHECK(streq(g.menuItem(i), en[i]));
+  CHECK(g.craft(0) == SandboxGame::CraftNeedItems && msgIs(g, "NEED ITEMS"));
+  // an unknown language in the file keeps English; the file is read only at start
+  putFile(kLangFile, "lang = xx\n");
+  CHECK(create(g) == pge::Ok && g.lang() == 0 && streq(g.menuItem(5), "LANGUAGE: ENGLISH"));
+  putFile(kLangFile, "lang = ru\n");
+  CHECK(create(g) == pge::Ok && g.lang() == 1);
+  std::remove(kLangFile);
+  CHECK(create(g) == pge::Ok && g.lang() == 0);  // the other tests run in English
+
+  // every text fits: menu rows into the 200 px panel (1 px border), the help line and the messages into the screen
+  const pge::StringTable& t = g.text();
+  for (uint8_t l = 0; l < t.nlang; l++) {
+    for (uint16_t id = 0; id < TXT_COUNT; id++) {
+      const char* s = t.get(l, id);
+      CHECK(s[0] != 0);
+      CHECK(pge::textWidth(pge::kFont5x7, s) <= (id <= TXT_MENU_OVERLAY ? 200 - 2 : PGE_LOGICAL_W - 4));
+    }
+  }
+  return 0;
+}
+
 static const char* kSave = "test_sandbox_tmp.sav";
 static const char* kSave2 = "test_sandbox_tmp2.sav";
 static const char* kSave3 = "test_sandbox_tmp3.sav";
@@ -675,7 +764,7 @@ static int testRenderMenu() {
   CHECK(renderOk(g_ai, g_buf2));
   int diff = 0;
   for (uint32_t i = 0; i < PGE_LOGICAL_W * PGE_LOGICAL_H; i++) diff += g_buf[i] != g_buf2[i];
-  CHECK(diff > 1000);  // the menu panel (200 x 54) plus its help line
+  CHECK(diff > 1000);  // the menu panel (200 x 63) plus its help line
   return 0;
 }
 
@@ -697,6 +786,7 @@ static int testAutoplay() {
 
 int main() {
   CHECK(pge::init() == pge::Ok);
+  std::remove(kLangFile);
   if (testMain()) return 1;
   if (testRender()) return 1;
   if (testPlaceOverlap()) return 1;
@@ -707,10 +797,12 @@ int main() {
   if (testInventory()) return 1;
   if (testCraft()) return 1;
   if (testMenu()) return 1;
+  if (testLanguage()) { std::remove(kLangFile); return 1; }
   if (testSaveLoad()) { rmAll(); return 1; }
   if (testLoadFailures()) { rmAll(); return 1; }
   if (testRenderMenu()) return 1;
   if (testAutoplay()) return 1;
+  std::remove(kLangFile);
   std::printf("test_sandbox: ok\n");
   return 0;
 }

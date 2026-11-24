@@ -4,6 +4,7 @@
 Blob = 12-byte header ("PGEA", type u8, version u8 = 1, u16 0, u32 payload size) + payload, little-endian.
 """
 import argparse
+import csv
 import json
 import os
 import re
@@ -13,7 +14,7 @@ import tempfile
 
 from PIL import Image
 
-T_SPRITES, T_TILESET, T_FONT, T_TILEMAP = 0, 1, 2, 6
+T_SPRITES, T_TILESET, T_FONT, T_TILEMAP, T_STRINGS = 0, 1, 2, 6, 7
 FLIP_MASK = 0xF0000000  # Tiled flip/rotate flag bits (plus a spare nibble bit)
 
 
@@ -231,6 +232,74 @@ def _tiled_ids(text, layer_name):
     return w, h, ids
 
 
+# ---------------------------------------------------------------- strings
+
+def strings_blob(path, prefix="TXT_"):
+    """UTF-8 CSV -> (text-table blob, ids). Header: id, then 1..16 language codes (2 letters a-z, the first one is the
+    fallback). One row per string: id, then one cell per language; an empty cell in another language falls back to the
+    first one. Blank rows and rows starting with # are skipped. Identical strings share one pool entry."""
+    try:
+        with open(path, "r", encoding="utf-8-sig", newline="") as f:  # -sig: a BOM is not part of the header
+            rows = list(csv.reader(f))
+    except (OSError, UnicodeDecodeError, csv.Error) as e:
+        raise ToolError(f"cannot read {path}: {e}")
+    rows = [(n, r) for n, r in enumerate(rows, 1) if any(r) and not r[0].startswith("#")]
+    if not rows:
+        raise ToolError("strings CSV has no header")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", prefix + "COUNT"):
+        raise ToolError(f"bad prefix {prefix!r}")
+    if any("\0" in c for _, r in rows for c in r):
+        raise ToolError("a cell contains a NUL character")
+    head = rows[0][1]
+    codes = head[1:]
+    if head[0] != "id" or not codes:
+        raise ToolError('header must be "id" followed by the language codes')
+    if len(codes) > 16:
+        raise ToolError("more than 16 languages")
+    for c in codes:
+        if not re.fullmatch(r"[a-z]{2}", c):
+            raise ToolError(f"language code {c!r} is not 2 letters a-z")
+    if len(set(codes)) != len(codes):
+        raise ToolError("duplicate language code")
+    body = rows[1:]
+    if not body:
+        raise ToolError("no strings")
+    if len(body) > 0xFFFF:
+        raise ToolError("more than 65535 strings")
+    ids = []
+    for n, r in body:
+        if len(r) != len(head):
+            raise ToolError(f"row {n}: {len(r)} cells, the header has {len(head)}")
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", r[0]) or r[0] == "COUNT":
+            raise ToolError(f"row {n}: bad id {r[0]!r}")
+        if r[0] in ids:
+            raise ToolError(f"row {n}: duplicate id {r[0]}")
+        if r[1] == "":
+            raise ToolError(f"row {n}: empty text in the first language ({codes[0]})")
+        ids.append(r[0])
+    pool, where, offs = bytearray(), {}, []
+    for li in range(len(codes)):  # language-major, id order: the first occurrence of a text owns the pool entry
+        for _, r in body:
+            if r[1 + li] == "":
+                offs.append(0xFFFFFFFF)
+                continue
+            s = r[1 + li].encode("utf-8") + b"\0"
+            if s not in where:
+                where[s] = len(pool)
+                pool += s
+            offs.append(where[s])
+    if len(pool) > 0xFFFFFFFE:
+        raise ToolError("string pool too large")
+    payload = (struct.pack("<BBH", len(codes), 0, len(ids)) + "".join(codes).encode("ascii")
+               + struct.pack(f"<{len(offs)}I", *offs) + bytes(pool))
+    return blob(T_STRINGS, payload), ids
+
+
+def strings_enum(prefix, ids):
+    names = [f"    {prefix}{s} = {i},\n" for i, s in enumerate(ids)] + [f"    {prefix}COUNT = {len(ids)},\n"]
+    return "\nenum : unsigned short {\n" + "".join(names) + "};"
+
+
 # ---------------------------------------------------------------- output
 
 def default_name(path):
@@ -250,9 +319,9 @@ def _write_c(path, decl, name, items, fmt, tail):
         f.write(text)
 
 
-def write_c(path, data, name):
+def write_c(path, data, name, extra=""):
     _write_c(path, "alignas(4) static const unsigned char", name, data, "0x%02X",
-             f"static const unsigned int {name}_size = sizeof({name});")
+             f"static const unsigned int {name}_size = sizeof({name});{extra}")
 
 
 def write_palette_c(path, palette, name):
@@ -260,12 +329,12 @@ def write_palette_c(path, palette, name):
              f"static const unsigned int {name}_count = sizeof({name}) / sizeof({name}[0]);")
 
 
-def emit(data, args):
+def emit(data, args, extra=""):
     if args.out_bin:
         with open(args.out_bin, "wb") as f:
             f.write(data)
     if args.out_c:
-        write_c(args.out_c, data, args.name or default_name(args.input))
+        write_c(args.out_c, data, args.name or default_name(args.input), extra)
     if not (args.out_bin or args.out_c):
         print(f"{args.input}: {len(data)} bytes (payload {len(data) - 12})")
 
@@ -284,6 +353,9 @@ GOLDEN_SPRITES = bytes.fromhex(
 GOLDEN_FONT = bytes.fromhex(
     "50474541 0201 0000 12000000  03 02 41 02 01 01  1604 0100 0200  0507 0205 0701")
 GOLDEN_TILEMAP = bytes.fromhex("50474541 0601 0000 0A000000  0300 0200  00 01 02 03 00 FE")
+# en, ru x ids A, B: offsets 0, 3, 6, missing; pool "Hi\0" "Yo\0" "\u0414\u0430\0"
+GOLDEN_STRINGS = bytes.fromhex(
+    "50474541 0701 0000 23000000  02 00 0200  656E 7275  00000000 03000000 06000000 FFFFFFFF  486900 596F00 D094D0B000")
 
 
 def _golden_font_png(path, order=(0, 1, 2), tail=""):
@@ -339,6 +411,36 @@ def selftest(emit_dir):
 
         check(sparse(255)[17] == 255, "255 ranges must be accepted")
 
+        def wtext(name, text, bom=False):  # always UTF-8 (open(..., "w") would use the Windows code page)
+            with open(p(name), "wb") as f:
+                f.write((b"\xef\xbb\xbf" if bom else b"") + text.encode("utf-8"))
+            return p(name)
+
+        s_ok = 'id,en,ru\nA,"Hi","\u0414\u0430"\nB,"Yo",""\n'
+        sb, sids = strings_blob(wtext("s.csv", s_ok))
+        check(sb == GOLDEN_STRINGS and sids == ["A", "B"], f"golden strings mismatch: {sb.hex(' ')}")
+        check(strings_blob(p("s.csv"))[0] == sb, "strings conversion is not deterministic")
+        check(strings_blob(wtext("s_bom.csv", s_ok, bom=True))[0] == sb, "a BOM changed the strings blob")
+        check(strings_blob(wtext("s_cr.csv", "# c\r\nid,en,ru\r\n\r\nA,Hi,\u0414\u0430\r\n# x\r\nB,Yo,\r\n"))[0] == sb,
+              "comments / blank rows / CRLF changed the strings blob")
+        check(len(strings_blob(wtext("s_dd.csv", "id,en,de\nA,OK,OK\n"))[0]) == 31, "identical strings are not shared")
+        sbad = lambda text: lambda: strings_blob(wtext("s_bad.csv", text))
+        rejects("strings duplicate id", sbad("id,en\nA,x\nA,y\n"))
+        rejects("strings empty fallback", sbad("id,en,ru\nA,,x\n"))
+        rejects("strings code EN", sbad("id,EN\nA,x\n"))
+        rejects("strings duplicate code", sbad("id,en,en\nA,x,y\n"))
+        langs = ",".join("a" + chr(97 + i) for i in range(17))
+        rejects("strings 17 languages", sbad("id," + langs + "\nA," + "x," * 16 + "x\n"))
+        rejects("strings ragged row", sbad("id,en,ru\nA,x\n"))
+        rejects("strings id 1x", sbad("id,en\n1x,x\n"))
+        rejects("strings no rows", sbad("id,en\n"))
+        rejects("strings no header", sbad("A,x\n"))
+        rejects("strings id only", sbad("id\nA\n"))
+        rejects("strings NUL", sbad("id,en\nA,a\0b\n"))
+        with open(p("s_bad8.csv"), "wb") as f:
+            f.write(b"id,en\nA,\xff\n")
+        rejects("strings bad UTF-8", lambda: strings_blob(p("s_bad8.csv")))
+
         csv, js = p("m.csv"), p("m.json")
         with open(csv, "w") as f:
             f.write("0,1,2\n3,0,254\n")
@@ -392,6 +494,7 @@ def selftest(emit_dir):
             write_c(os.path.join(emit_dir, "sample_sprites.h"), b, "kSampleSprites")
             write_c(os.path.join(emit_dir, "sample_font.h"), fb, "kSampleFont")
             write_c(os.path.join(emit_dir, "sample_tilemap.h"), tilemap_blob(csv), "kSampleTilemap")
+            write_c(os.path.join(emit_dir, "sample_strings.h"), sb, "kSampleStrings")
     print("selftest OK")
 
 
@@ -426,6 +529,10 @@ def main(argv=None):
     g.add_argument("--chars", help="characters of the cells in cell order (UTF-8)")
     g.add_argument("--chars-file", help="UTF-8 file holding the characters (newlines ignored)")
     sp.add_argument("--spacing", type=int, default=1, help="pixels between glyphs (default 1)")
+    sp = sub.add_parser("strings", description="Text-table blob from a UTF-8 CSV: header id,<lang codes>; one row per "
+                        "string. With --out-c the header also gets an enum <PREFIX><ID> = 0.. and <PREFIX>COUNT.")
+    common(sp, "strings")
+    sp.add_argument("--prefix", default="TXT_", help="enum name prefix (default TXT_)")
     sp = sub.add_parser("palette")
     common(sp, "palette")
     sp = sub.add_parser("tilemap")
@@ -455,6 +562,9 @@ def main(argv=None):
                 emit(font_blob(args.input, int(m[1]), int(m[2]), chars, args.spacing), args)
         elif args.cmd == "tilemap":
             emit(tilemap_blob(args.input, args.layer), args)
+        elif args.cmd == "strings":
+            data, ids = strings_blob(args.input, args.prefix)
+            emit(data, args, strings_enum(args.prefix, ids))
         else:
             pal = palette_list(args.input)
             if args.out_c:

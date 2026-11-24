@@ -4,6 +4,8 @@ namespace pge {
 
 namespace {
 
+constexpr uint32_t kStringMissing = 0xFFFFFFFFu;
+
 uint16_t rd16(const uint8_t* p) { return static_cast<uint16_t>(p[0] | (p[1] << 8)); }
 uint32_t rd32(const uint8_t* p) {
   return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) |
@@ -121,6 +123,47 @@ Error assetTilemap(const void* blob, uint32_t len, TilemapView& out) {
   out.h = h;
   out.tiles = v.payload + 4;
   return Ok;
+}
+
+Error assetStrings(const void* blob, uint32_t len, StringTable& out) {
+  AssetView v;
+  Error e = assetCheck(blob, len, AssetType::Strings, v);
+  if (e != Ok) return e;
+  PGE_CHECK(v.size >= 4, Corrupt);
+  const uint8_t* p = v.payload;
+  const uint32_t nlang = p[0], nstr = rd16(p + 2);
+  PGE_CHECK(nlang >= 1 && nlang <= 16 && p[1] == 0 && nstr >= 1, Corrupt);
+  const uint64_t head = 4 + 2 * static_cast<uint64_t>(nlang) + 4 * static_cast<uint64_t>(nlang) * nstr;
+  PGE_CHECK(head < v.size, Corrupt);  // at least one pool byte
+  const uint32_t pool_size = v.size - static_cast<uint32_t>(head);
+  const uint8_t* offs = p + 4 + 2 * nlang;
+  PGE_CHECK(p[v.size - 1] == 0, Corrupt);
+  for (uint32_t i = 0; i < 2 * nlang; i++) PGE_CHECK(p[4 + i] >= 'a' && p[4 + i] <= 'z', Corrupt);
+  for (uint32_t i = 0; i < nlang * nstr; i++) {
+    const uint32_t o = rd32(offs + 4 * i);
+    PGE_CHECK(o < pool_size || (o == kStringMissing && i >= nstr), Corrupt);  // language 0 (the first nstr) has no gaps
+  }
+  out.codes = p + 4;
+  out.offs = offs;
+  out.pool = reinterpret_cast<const char*>(p + head);
+  out.pool_size = pool_size;
+  out.nlang = static_cast<uint8_t>(nlang);
+  out.count = static_cast<uint16_t>(nstr);
+  return Ok;
+}
+
+const char* StringTable::get(uint8_t lang, uint16_t id) const {
+  if (lang >= nlang || id >= count) return "";
+  uint32_t o = rd32(offs + 4 * (static_cast<uint32_t>(lang) * count + id));
+  if (o == kStringMissing) o = rd32(offs + 4 * id);  // fall back to language 0
+  return o == kStringMissing ? "" : pool + o;
+}
+
+int StringTable::langIndex(const char* code) const {
+  if (code == nullptr || code[0] == 0 || code[1] == 0 || code[2] != 0) return -1;
+  for (int i = 0; i < nlang; i++)
+    if (codes[2 * i] == static_cast<uint8_t>(code[0]) && codes[2 * i + 1] == static_cast<uint8_t>(code[1])) return i;
+  return -1;
 }
 
 }  // namespace pge
