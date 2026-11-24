@@ -6,7 +6,7 @@
 > - `gfx.h`: Color, Rect, SpriteFlags, SpriteSheet, Tileset, TileLayer, Font, Canvas, RenderConfig, renderFrame, turnRect.
 > - `color.h`: rgb(), red8/green8/blue8, kPalette16.
 > - `sprite.h`: Animation, animFrame. `camera.h`: Camera, clampAxis, parallaxOffset, MapLayer, drawLayers, orientForGravity.
-> - `ui.h`: Style, label, bar, iconGrid, listMenu, formatU32, MenuNav. `particles.h`: Particle, Particles.
+> - `ui.h`: Style, label, bar, iconGrid, listMenu, formatU32, MenuNav, Toast, ToastQueue, toasts. `particles.h`: Particle, Particles.
 > - Source of truth is the header comments; this file only restates them.
 
 ## `pge/gfx.h`
@@ -159,6 +159,26 @@ Immediate-mode widgets in `pge::ui`: pure functions of their arguments, drawn fr
 | `iconGrid` | `void iconGrid(Canvas& c, const Style& s, Rect area, const SpriteSheet& icons, const uint16_t* frames, const uint8_t* counts, uint8_t cols, uint8_t rows, int8_t selected);` | cols x rows cells of (icon + 2*pad) size; `frames[i] == 0xFFFF` is an empty slot, `counts[i] > 1` (counts may be null) is printed bottom-right; `selected < 0` selects nothing. |
 | `listMenu` | `void listMenu(Canvas& c, const Style& s, Rect r, const char* const* items, uint8_t n, uint8_t selected);` | Rows of `font->h + 2*pad`; the list scrolls so that `selected` is the last visible row when it does not fit. |
 | `MenuNav` | `struct MenuNav { uint8_t selected = 0; int update(const Input& in, uint8_t n); };` | `update`: Up / Down wrap; returns the activated index (A or Start), else -1. |
+| `kNoIcon`, `Toast`, `ToastText` | `constexpr uint16_t kNoIcon = 0xFFFF; struct Toast { uint16_t text; uint16_t icon; uint8_t priority; uint16_t ticks; }; using ToastText = const char* (*)(const void* ctx, uint16_t text);` | `text` is an id that the game maps to a string at draw time (`ToastText`, may return null); `icon` is a sprite frame or `kNoIcon`; `ticks` are left once visible. |
+| `ToastQueue` | `class ToastQueue { static constexpr uint8_t kCap = 8; uint8_t max_visible = 3; bool push(uint16_t text, uint16_t icon, uint8_t priority, uint16_t ticks); void tick(); uint8_t count() const; uint8_t visibleCount() const; const Toast& at(uint8_t i) const; const Toast* find(uint16_t text) const; uint16_t dropped() const; void clear(); };` | Notification queue in fixed storage. Holds state (like `MenuNav`): `tick()` belongs in onTick, `toasts()` in onRender. It never reads Input, so toasts never block input. |
+| `toasts` | `void toasts(Canvas& c, const Style& s, int x, int y_bottom, int w, const ToastQueue& q, const SpriteSheet* icons, ToastText text, const void* ctx);` | Draws only the visible toasts, stacked upward: row height = max(font h, icon h) + 2*pad, the oldest is the bottom row and ends at `y_bottom`. Each row: bg, 1 px accent outline, icon (if `icons` and the toast has one), then fg text. A pure function of its arguments, like the other widgets. |
+
+Toast rules:
+
+- Entries `[0, visibleCount())` are visible, oldest first (`visibleCount() = min(count(), max_visible)`); the rest wait, highest priority first, first come first served within a priority. Only visible toasts count down; one that expires gives its slot to the first waiting one, whose countdown starts then. `push` with `ticks == 0` returns false and changes nothing.
+- A toast pushed with `ticks = N` into a free slot is still queued after N - 1 `tick()` calls and gone after N.
+- A push with a text id that is already queued (visible or waiting) updates that toast instead of adding a row: new icon, the timer restarts, priority is the higher of the two (a waiting one is re-sorted). A message raised every tick therefore does not flood the queue.
+- A full queue (`kCap` = 8) drops the new toast, or the last waiting one if its priority is lower than the new one's. Visible toasts are never displaced. Every drop adds to `dropped()` (saturating); `clear()` empties the queue and keeps that counter.
+
+```cpp
+// onTick: a toast per Death event; the queue merges repeats of the same text id
+Event ev;
+while (ent_.popEvent(ev))
+  if (ev.type == EventType::Death) toasts_.push(kTxtDied, kIconSkull, 1, 120);
+toasts_.tick();
+// onRender (last, so the stack sits on top): up to 3 rows at the bottom left
+ui::toasts(c, style, 4, PGE_LOGICAL_H - 4, 112, toasts_, &icons_, textOf, &strings_);
+```
 
 ## `pge/particles.h`
 

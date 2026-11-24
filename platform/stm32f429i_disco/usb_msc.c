@@ -155,27 +155,6 @@ static int wait_ready(void) {
   return 0;
 }
 
-/* SCSI SYNCHRONIZE CACHE(10); the Cube MSC class has no call for it, and without it some sticks lose their write
- * cache when the board resets and cuts VBUS. Best effort. */
-static void sync_cache(void) {
-  if (!unit_ready()) return;
-  MSC_HandleTypeDef* m = (MSC_HandleTypeDef*)s_host.pActiveClass->pData;
-  if (m->unit[0].state != MSC_IDLE) return;
-  memset(m->hbot.cbw.field.CB, 0, CBW_CB_LENGTH);
-  m->hbot.cbw.field.CB[0] = 0x35;
-  m->hbot.cbw.field.CBLength = CBW_LENGTH;
-  m->hbot.cbw.field.DataTransferLength = 0;
-  m->hbot.cbw.field.Flags = USB_EP_DIR_OUT;
-  m->hbot.state = BOT_SEND_CBW;
-  m->hbot.cmd_state = BOT_CMD_WAIT;
-  const uint32_t t0 = HAL_GetTick();
-  USBH_StatusTypeDef st;
-  do { st = USBH_MSC_BOT_Process(&s_host, 0); } while (st == USBH_BUSY && HAL_GetTick() - t0 < 2000);
-  m->hbot.state = BOT_SEND_CBW;   /* always leave BOT ready for the next command */
-  m->hbot.cmd_state = BOT_CMD_SEND;
-  if (st != USBH_OK) pge_dbg_printf("usb: sync st=%d\n", (int)st);
-}
-
 /* ---- FatFs disk functions ----------------------------------------------------------------------- */
 DSTATUS disk_status(BYTE pdrv) { return (pdrv == 0 && unit_ready()) ? 0 : STA_NOINIT; }
 DSTATUS disk_initialize(BYTE pdrv) { return (pdrv == 0 && wait_ready() == 0) ? 0 : STA_NOINIT; }
@@ -191,6 +170,7 @@ DRESULT disk_write(BYTE pdrv, const BYTE* buff, DWORD sector, UINT count) {
 DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void* buff) {
   (void)buff;
   if (pdrv) return RES_PARERR;
-  if (cmd == CTRL_SYNC) { sync_cache(); return RES_OK; }   /* _MAX_SS == _MIN_SS and no mkfs: FatFs only asks for CTRL_SYNC */
+  /* no SCSI SYNCHRONIZE CACHE: on the user's stick it never succeeded (FAIL or a 2000 ms BUSY timeout per sync, 2-4 s per save, measured 2026-11-24) and saves survived power cycles without it */
+  if (cmd == CTRL_SYNC) return RES_OK;   /* _MAX_SS == _MIN_SS and no mkfs: FatFs only asks for CTRL_SYNC */
   return RES_PARERR;
 }

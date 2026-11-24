@@ -71,6 +71,11 @@ static void sceneList(Canvas& c) { ui::listMenu(c, kStyle, Rect{3, 3, 50, 40}, k
 static void sceneIcons(Canvas& c) { ui::iconGrid(c, kStyle, Rect{2, 3, 60, 40}, kIcons, kFrames, kCounts, 3, 2, static_cast<int8_t>(g_sel)); }
 static void sceneOverlay(Canvas& c) { drawOverlay(c, kStyle, g_stats, g_flags); }
 
+static const char* const kToastStr[2] = {"A", "B"};
+static const char* toastText(const void* ctx, uint16_t id) { return id < 2 ? static_cast<const char* const*>(ctx)[id] : nullptr; }
+static ui::ToastQueue g_toasts;
+static void sceneToast(Canvas& c) { ui::toasts(c, kStyle, 6, 60, 50, g_toasts, &kIcons, toastText, kToastStr); }
+
 static Input mkInput(uint32_t prev, uint32_t cur) {
   Input in;
   pge_raw_input r = {};
@@ -230,9 +235,150 @@ int main() {
 #endif
   }
 
+  // ---- ToastQueue ----
+  {
+    ui::ToastQueue q;
+    CHECK(q.max_visible == 3 && q.count() == 0 && q.visibleCount() == 0 && q.dropped() == 0 && !q.find(1));
+    q.tick();  // empty: nothing happens
+    CHECK(q.push(1, ui::kNoIcon, 1, 3));  // timeout is exact: still there after 2 ticks, gone after 3
+    q.tick();
+    q.tick();
+    CHECK(q.count() == 1 && q.find(1) && q.find(1)->ticks == 1);
+    q.tick();
+    CHECK(q.count() == 0 && !q.find(1));
+  }
+  {
+    ui::ToastQueue q;  // priority order with one visible slot
+    q.max_visible = 1;
+    CHECK(q.push(10, 0, 1, 5) && q.push(11, 0, 1, 5) && q.push(12, 0, 5, 5) && q.push(13, 0, 1, 5));
+    CHECK(q.count() == 4 && q.visibleCount() == 1);
+    CHECK(q.at(0).text == 10 && q.at(1).text == 12 && q.at(2).text == 11 && q.at(3).text == 13);
+    q.tick();
+    CHECK(q.at(0).ticks == 4 && q.at(1).ticks == 5 && q.at(2).ticks == 5 && q.at(3).ticks == 5);  // waiting ones do not count down
+    for (int i = 0; i < 4; i++) q.tick();  // 10 expires on the 5th tick
+    CHECK(q.count() == 3 && q.at(0).text == 12 && q.at(0).ticks == 5);  // 12 moved up, its countdown starts now
+    q.tick();
+    CHECK(q.at(0).ticks == 4 && q.at(1).text == 11 && q.at(1).ticks == 5);
+  }
+  {
+    ui::ToastQueue q;  // stacking: three visible, a fourth waits even with a top priority
+    for (uint16_t i = 0; i < 3; i++) CHECK(q.push(i, ui::kNoIcon, 1, 10));
+    CHECK(q.count() == 3 && q.visibleCount() == 3 && q.at(0).text == 0 && q.at(2).text == 2);
+    CHECK(q.push(3, ui::kNoIcon, 9, 10) && q.count() == 4 && q.visibleCount() == 3 && q.at(3).text == 3);
+    ui::ToastQueue u;  // an expired visible toast gives its slot to the first waiting one
+    u.max_visible = 2;
+    CHECK(u.push(1, 0, 1, 2) && u.push(2, 0, 1, 10) && u.push(3, 0, 1, 10));
+    u.tick();
+    u.tick();
+    CHECK(u.count() == 2 && u.at(0).text == 2 && u.at(1).text == 3 && u.at(0).ticks == 8 && u.at(1).ticks == 10);
+  }
+  {
+    ui::ToastQueue q;  // merge: same text id, no new row
+    CHECK(q.push(7, 0, 1, 10));
+    q.tick();
+    q.tick();
+    CHECK(q.push(7, 1, 3, 20) && q.count() == 1);
+    CHECK(q.find(7)->ticks == 20 && q.find(7)->icon == 1 && q.find(7)->priority == 3);
+    CHECK(q.push(7, 0, 1, 5) && q.count() == 1 && q.find(7)->priority == 3 && q.find(7)->ticks == 5);
+    ui::ToastQueue w;  // a waiting toast moves forward with a higher priority, behind the equal ones
+    w.max_visible = 1;
+    CHECK(w.push(1, 0, 1, 9) && w.push(2, 0, 1, 9) && w.push(3, 0, 1, 9) && w.push(4, 0, 2, 9));
+    CHECK(w.at(0).text == 1 && w.at(1).text == 4 && w.at(2).text == 2 && w.at(3).text == 3);
+    CHECK(w.push(3, 0, 5, 9) && w.count() == 4);
+    CHECK(w.at(0).text == 1 && w.at(1).text == 3 && w.at(2).text == 4 && w.at(3).text == 2);
+    CHECK(w.push(2, 0, 5, 9) && w.count() == 4);
+    CHECK(w.at(0).text == 1 && w.at(1).text == 3 && w.at(2).text == 2 && w.at(3).text == 4);
+    CHECK(w.push(1, 0, 9, 9) && w.at(0).text == 1 && w.at(0).priority == 9);  // a visible one stays in place
+  }
+  {
+    ui::ToastQueue ma;  // waiting merge, same priority: keeps its place in line, icon and ticks update
+    ma.max_visible = 1;
+    CHECK(ma.push(1, 0, 1, 9) && ma.push(2, 0, 1, 9) && ma.push(3, 0, 1, 9));
+    CHECK(ma.push(2, 4, 1, 5) && ma.count() == 3);
+    CHECK(ma.at(0).text == 1 && ma.at(1).text == 2 && ma.at(2).text == 3);
+    CHECK(ma.at(1).icon == 4 && ma.at(1).ticks == 5 && ma.at(1).priority == 1);
+    ui::ToastQueue mb;  // waiting merge, lower new priority: keeps the old priority and its place
+    mb.max_visible = 1;
+    CHECK(mb.push(1, 0, 1, 9) && mb.push(2, 0, 3, 9) && mb.push(3, 0, 3, 9) && mb.push(4, 0, 2, 9));
+    CHECK(mb.push(2, 4, 1, 5) && mb.count() == 4);
+    CHECK(mb.at(0).text == 1 && mb.at(1).text == 2 && mb.at(2).text == 3 && mb.at(3).text == 4);
+    CHECK(mb.at(1).priority == 3 && mb.at(1).icon == 4 && mb.at(1).ticks == 5);
+  }
+  {
+    ui::ToastQueue q;  // max_visible 7: exactly one waiting slot, a higher priority displaces it
+    q.max_visible = 7;
+    for (uint16_t i = 0; i < 8; i++) CHECK(q.push(i, 0, 2, 9));
+    CHECK(q.visibleCount() == 7 && q.count() == 8 && q.at(7).text == 7);
+    CHECK(!q.push(20, 0, 2, 9) && q.dropped() == 1 && q.at(7).text == 7);  // equal: refused
+    CHECK(q.push(21, 0, 3, 9) && q.dropped() == 2 && q.count() == 8);
+    CHECK(!q.find(7) && q.at(7).text == 21 && q.at(6).text == 6 && q.visibleCount() == 7);
+    ui::ToastQueue fm;  // a waiting merge on a full queue needs no room: no drop, nothing displaced
+    fm.max_visible = 1;
+    for (uint16_t i = 0; i < 8; i++) CHECK(fm.push(i, 0, 2, 9));
+    CHECK(fm.push(7, 3, 2, 4) && fm.count() == 8 && fm.dropped() == 0 && fm.at(7).text == 7 && fm.at(7).icon == 3);
+    CHECK(fm.push(7, 3, 5, 4) && fm.count() == 8 && fm.dropped() == 0 && fm.at(1).text == 7 && fm.at(1).priority == 5);
+    CHECK(fm.find(1) && fm.find(6) && fm.at(2).text == 1);
+  }
+  {
+    ui::ToastQueue q;  // full queue: one visible slot, seven waiting
+    q.max_visible = 1;
+    for (uint16_t i = 0; i < 8; i++) CHECK(q.push(i, 0, 2, 9));
+    CHECK(q.count() == 8 && q.dropped() == 0);
+    CHECK(!q.push(20, 0, 1, 9) && q.dropped() == 1 && q.count() == 8 && !q.find(20));  // lower priority: refused
+    CHECK(!q.push(21, 0, 2, 9) && q.dropped() == 2 && q.count() == 8 && !q.find(21));  // equal: refused
+    CHECK(q.push(0, 0, 2, 4) && q.dropped() == 2 && q.count() == 8 && q.find(0)->ticks == 4);  // a merge needs no room
+    CHECK(q.push(22, 0, 3, 9) && q.dropped() == 3 && q.count() == 8);  // higher: the last waiting one (7) is dropped
+    CHECK(!q.find(7) && q.find(6) && q.at(0).text == 0 && q.at(1).text == 22);
+    q.clear();
+    CHECK(q.count() == 0 && q.visibleCount() == 0 && !q.find(0) && q.dropped() == 3);  // clear keeps the counter
+    ui::ToastQueue v;  // visible toasts are never displaced
+    v.max_visible = 8;
+    for (uint16_t i = 0; i < 8; i++) CHECK(v.push(i, 0, 1, 9));
+    CHECK(!v.push(30, 0, 9, 9) && v.dropped() == 1 && !v.find(30) && v.at(7).text == 7);
+    for (int i = 0; i < 70000; i++) v.push(31, 0, 1, 9);
+    CHECK(v.dropped() == 65535);  // saturates
+  }
+  {
+    ui::ToastQueue q;  // ticks 0: refused, not counted, an existing toast is not touched
+    CHECK(!q.push(1, 0, 1, 0) && q.count() == 0 && q.dropped() == 0);
+    CHECK(q.push(1, 0, 1, 7) && !q.push(1, 2, 9, 0) && q.count() == 1 && q.find(1)->ticks == 7 && q.find(1)->priority == 1);
+    ui::ToastQueue z;  // max_visible 0: everything waits, tick() changes nothing
+    z.max_visible = 0;
+    CHECK(z.push(1, 0, 1, 3) && z.push(2, 0, 2, 3) && z.count() == 2 && z.visibleCount() == 0);
+    CHECK(z.at(0).text == 2);
+    z.tick();
+    z.tick();
+    z.tick();
+    CHECK(z.count() == 2 && z.at(0).ticks == 3 && z.at(1).ticks == 3);
+  }
+  {
+    // pixels: 8 x 8 icons, pad 1, 7 px font -> 10 px rows; x = 6, bottom edge 60, width 50; two visible, a third waits
+    g_toasts.clear();
+    g_toasts.max_visible = 2;
+    CHECK(g_toasts.push(0, 0, 1, 100) && g_toasts.push(1, ui::kNoIcon, 1, 100) && g_toasts.push(5, 0, 1, 100));
+    draw(sceneToast, g_buf);
+    CHECK(g_buf[59 * W + 6] == kAcc && g_buf[59 * W + 55] == kAcc && g_buf[50 * W + 6] == kAcc);  // bottom row outline
+    CHECK(g_buf[40 * W + 6] == kAcc && g_buf[49 * W + 6] == kAcc && g_buf[39 * W + 6] == kBG);    // exactly one row higher
+    CHECK(g_buf[60 * W + 6] == kBG && g_buf[30 * W + 6] == kBG);                                    // the waiting one is not drawn
+    CHECK(g_buf[55 * W + 40] == kPanel && g_buf[45 * W + 40] == kPanel);
+    CHECK(count(g_buf, Rect{8, 51, 8, 8}, kRed) == 64 && count(g_buf, Rect{8, 51, 8, 8}, kFG) == 0);  // bottom row: icon, ...
+    CHECK(count(g_buf, Rect{17, 51, 30, 7}, kFG) > 0);                                                // ... then the text after it
+    CHECK(count(g_buf, Rect{6, 40, 50, 10}, kRed) == 0 && count(g_buf, Rect{8, 41, 20, 7}, kFG) > 0);  // upper row: no icon, text first
+    CHECK(count(g_buf, Rect{0, 0, W, H}, kBG) == W * H - 2 * 50 * 10);
+    Canvas c(g_buf, W, H, 0, H, 1);  // no icons, no text function: 9 px rows of plain boxes
+    c.clear(kBG);
+    ui::toasts(c, kStyle, 6, 60, 50, g_toasts, nullptr, nullptr, nullptr);
+    CHECK(g_buf[59 * W + 6] == kAcc && g_buf[42 * W + 6] == kAcc && g_buf[41 * W + 6] == kBG);
+    CHECK(count(g_buf, Rect{0, 0, W, H}, kFG) == 0 && count(g_buf, Rect{0, 0, W, H}, kRed) == 0);
+    c.clear(kBG);
+    ui::ToastQueue none;
+    ui::toasts(c, kStyle, 6, 60, 50, none, &kIcons, toastText, kToastStr);
+    CHECK(count(g_buf, Rect{0, 0, W, H}, kBG) == W * H);
+  }
+
   // ---- band independence (one band vs 16-line and 7-line bands) ----
   {
-    static const Scene scenes[] = {sceneBar, sceneLabel, sceneList, sceneIcons, sceneOverlay};
+    static const Scene scenes[] = {sceneBar, sceneLabel, sceneList, sceneIcons, sceneOverlay, sceneToast};
     g_stats.fps = 60;
     g_stats.tick_us = 1234;
     g_stats.pool_high[1] = 9;

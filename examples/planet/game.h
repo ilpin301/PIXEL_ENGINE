@@ -7,7 +7,8 @@
 // most 2 degrees per tick and keeps its angle within 48 px of the planet centre, where a few px swing the radial
 // direction wildly. A small compass in the top-right corner shows where the planet's world-up is on the screen (both
 // view modes). Holding A is dig mode: no gravity, free 360-degree movement with the analog stick, and the rock ahead is
-// dug automatically.
+// dug automatically. Messages (SAVED, LOG FULL, ...) are toasts (ui::ToastQueue) stacked bottom-left, up to 3, warnings first.
+// Start shows SAVING... and then blocks the game for the USB write; the HUD shows how long the save took (saveMs()).
 // Only public "pge/..." headers are used. The object must stay in place after onCreate (tilesets and the world point
 // into it), so keep it static. "Screen frame" = the frame where gravity points down: one clockwise camera turn maps a
 // world vector (x, y) (y down) to the screen vector (-y, x), so all walk and aim logic runs there and holding screen
@@ -20,6 +21,7 @@
 #include "pge/color.h"
 #include "pge/engine.h"
 #include "pge/entity.h"
+#include "pge/hal/time.h"
 #include "pge/save.h"
 #include "pge/storage.h"
 #include "pge/ui.h"
@@ -105,8 +107,10 @@ class PlanetGame {
     bench_ = Bench{};
     bot_in_ = Input{};
     stuck_ = 0;
-    msg_ = MsgNone;
-    msg_t_ = 0;
+    toasts_.clear();
+    last_msg_ = MsgNone;
+    save_wait_ = 0;
+    save_ms_ = 0;
     walk_ = false;
     dig_ = false;
     dir_ = 0;
@@ -118,6 +122,12 @@ class PlanetGame {
 
   void onTick(const pge::Input& real) {
     using namespace pge;
+    // Two ticks, not one: the SAVING toast must be drawn at least once (a catch-up tick draws nothing) before the save blocks.
+    if (save_wait_ > 0 && --save_wait_ == 0) {
+      const uint32_t t0 = pge_hal_time_us();
+      saveToStorage();
+      save_ms_ = (pge_hal_time_us() - t0 + 999) / 1000;  // rounded up: a save under 1 ms still shows (0 = no save yet)
+    }
     const Input& want = autoplay ? botInput() : real;
     if (turn_ > 0) turn_--;
     world_.ensureLoaded(Rect{0, 0, kWorldPx, kWorldPx}, 1);
@@ -129,7 +139,15 @@ class PlanetGame {
     }
     const Input& in = turn_ > 0 ? idle_ : want;  // input is ignored during the turn; physics keeps running
     if (in.pressed(Button::Select)) toggleChar();
-    if (in.pressed(Button::Start)) saveToStorage();
+    // shortcut: blocking save, the time grows with the change log (up to 163,840 B), upgrade = a save split over ticks in pge/save.h.
+    if (in.pressed(Button::Start) && save_wait_ == 0) {
+      if (storage_ok_) {
+        say(MsgSaving, 4);  // ticks do not advance during the freeze: the toast shows during it and leaves right after
+        save_wait_ = 2;
+      } else {
+        saveToStorage();  // shows NO STORAGE
+      }
+    }
     dig_ = want.held(Button::A);  // from want, not in: the iris turn (in = idle) must not drop dig mode
     pge::EntityMeta& em = *ent_.meta(player_);
     if (dig_) em.flags &= (uint16_t)~kEntGravity;
@@ -147,7 +165,7 @@ class PlanetGame {
     walk_ = dir_ != 0 && (ent_.meta(player_)->flags & kEntOnGround);
     updateTilt();
     buildView();
-    if (msg_t_ > 0) msg_t_--;
+    toasts_.tick();
     ticks_++;
     if (autoplay && eng_ && ticks_ > 60) sample();
     format();
@@ -163,6 +181,8 @@ class PlanetGame {
     c.text(kFont5x7, 3, 3, hud_, rgb(0, 0, 0));
     c.text(kFont5x7, 2, 2, hud_, rgb(255, 255, 255));
     drawCompass(c);
+    const ui::Style style{&kFont5x7, rgb(255, 255, 255), rgb(16, 18, 40), rgb(200, 200, 215), 2};
+    ui::toasts(c, style, 4, PGE_LOGICAL_H - 4, 112, toasts_, &icon_sheet_, toastText, nullptr);
   }
 
   // The 4-way camera: tile maps turned by orient, the character tilted or upright, the iris at a turn.
@@ -235,7 +255,7 @@ class PlanetGame {
     }
   }
 
-  // Digs the fg tile if it is breakable. False if refused or if the change log is full ("LOG FULL" on the HUD).
+  // Digs the fg tile if it is breakable. False if refused or if the change log is full ("LOG FULL" toast).
   bool dig(int tx, int ty) {
     using namespace pge;
     if (!(world_.props(world_.get(tx, ty, Layer::Fg)).flags & kTileBreakable)) return false;
@@ -380,14 +400,17 @@ class PlanetGame {
     const int x = tx - win_x_, y = ty - win_y_;
     return x >= 0 && x < vis_n_ && y >= 0 && y < vis_n_ ? vis_fg_[y * vis_n_ + x] : 0;
   }
-  const char* message() const { return msg_t_ > 0 ? kMsgs[msg_] : ""; }  // HUD message, "" when expired
+  // The last message said while its toast is still queued, else "".
+  const char* message() const { return toasts_.find(last_msg_) ? kMsgs[last_msg_] : ""; }
+  uint32_t saveMs() const { return save_ms_; }  // ms the last Start save blocked the game, 0 = none yet
+  const pge::ui::ToastQueue& toasts() const { return toasts_; }
 
  private:
   enum { kKindPlayer = 0 };
   enum Msg : uint8_t { MsgNone, MsgLogFull, MsgNoRoom, MsgSaved, MsgSaveFailed, MsgNoSave, MsgLoadFailed, MsgLoaded,
-                       MsgNoStorage };
+                       MsgNoStorage, MsgSaving };
   static constexpr const char* const kMsgs[] = {"",        "LOG FULL",    "NO ROOM",   "SAVED",     "SAVE FAILED",
-                                                "NO SAVE", "LOAD FAILED", "LOADED",    "NO STORAGE"};
+                                                "NO SAVE", "LOAD FAILED", "LOADED",    "NO STORAGE", "SAVING..."};
   // 8.8 fixed point: 256 = 1 px (per tick for velocities); jetpack and run limits are in the screen frame
   static constexpr int kGrav = 40, kMaxFall = 4 * 256, kJump = 640, kMaxRun = 384, kAccel = 48, kThrust = 72, kJetMax = 384;
   static constexpr int kDig = 192;  // dig mode speed (0.75 px per tick) at full stick, in any direction
@@ -409,9 +432,11 @@ class PlanetGame {
     pge::roundGen(spec(), fg, wall, cx, cy, seed);
   }
 
-  bool say(Msg m) {  // returns false so failure paths can `return say(...)`
-    msg_ = m;
-    msg_t_ = 120;
+  static const char* toastText(const void*, uint16_t id) { return id <= MsgSaving ? kMsgs[id] : ""; }
+  bool say(Msg m, uint16_t ticks = 120) {  // returns false so failure paths can `return say(...)`
+    const bool ok = m == MsgSaved || m == MsgLoaded || m == MsgSaving;  // warnings (priority 2) show before confirmations (1)
+    toasts_.push(m, ok ? 0 : 1, ok ? 1 : 2, ticks);                     // icon frame 0 = check mark, 1 = warning
+    last_msg_ = m;
     return false;
   }
   static void wr32(uint8_t* o, int v) {
@@ -913,6 +938,15 @@ class PlanetGame {
       }
     drawChar(char24_px_, 24);
     drawChar(char32_px_, 32);
+    // toast icons: palette 1 green, 2 orange, 3 dark red
+    static constexpr const char* ic[2][8] = {
+        {"........", "......11", ".....11.", "1...11..", "11.11...", ".111....", "..1.....", "........"},
+        {"...22...", "..2222..", "..2332..", ".223322.", ".223322.", "22222222", "22233222", "22222222"}};
+    const pge::Color ip[] = {0, rgb(70, 210, 80), rgb(255, 160, 30), rgb(110, 25, 10)};
+    for (int i = 0; i < 4; i++) icon_pal_[i] = ip[i];
+    for (int f = 0; f < 2; f++)
+      for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 8; x++) icon_px_[f * 64 + y * 8 + x] = ic[f][y][x] == '.' ? 0 : static_cast<uint8_t>(ic[f][y][x] - '0');
   }
 
   static char* put(char* o, const char* s) {
@@ -931,8 +965,11 @@ class PlanetGame {
     o = putU(o, world_.changeCount());
     o = put(o, "/");
     o = putU(o, world_.changeCapacity());
-    o = put(o, "\n");
-    o = put(o, message());
+    if (save_ms_ > 0) {
+      o = put(o, "  SAVE ");
+      o = putU(o, save_ms_);
+      o = put(o, " MS");
+    }
     *o = 0;
   }
 
@@ -968,9 +1005,14 @@ class PlanetGame {
   uint8_t bot_orient_ = 0;
   bool walk_ = false, dig_ = false, storage_ok_ = false;  // dig_: A held, dig mode
   uint8_t ch_ = 32;  // live character height: char_h at onCreate, then Select / load
-  Msg msg_ = MsgNone;
-  uint16_t msg_t_ = 0;
+  pge::ui::ToastQueue toasts_;  // max_visible 3
+  Msg last_msg_ = MsgNone;
+  uint8_t icon_px_[2 * 64] = {};  // 2 toast icons, 8 x 8: check mark, warning
+  pge::Color icon_pal_[4] = {};
+  pge::SpriteSheet icon_sheet_{icon_px_, icon_pal_, 8, 8, 2, true};
   uint32_t ticks_ = 0, switches_ = 0;
+  uint32_t save_ms_ = 0;  // last Start save duration in ms, 0 = none yet
+  uint8_t save_wait_ = 0;  // ticks until the Start save runs (the SAVING toast needs a frame first), 0 = none pending
   char hud_[96] = {};
 };
 static_assert(PlanetGame::tiltSide(32) == PlanetGame::kTiltSideMax && PlanetGame::tiltSide(24) <= PlanetGame::kTiltSideMax,
