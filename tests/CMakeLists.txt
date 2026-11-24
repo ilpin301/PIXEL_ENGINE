@@ -4,7 +4,7 @@ add_test(NAME version COMMAND test_version)
 
 add_executable(test_gfx test_gfx.cpp)
 target_link_libraries(test_gfx PRIVATE pge_core)
-target_include_directories(test_gfx PRIVATE ${CMAKE_SOURCE_DIR}/examples/proto)
+target_include_directories(test_gfx PRIVATE ${PROJECT_SOURCE_DIR}/examples/proto)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test_gfx PRIVATE -Wall -Wextra)
 endif()
@@ -61,7 +61,7 @@ add_test(NAME collision COMMAND test_collision)
 
 add_executable(test_platformer test_platformer.cpp)
 target_link_libraries(test_platformer PRIVATE pge_core pge_platform_host_null)
-target_include_directories(test_platformer PRIVATE ${CMAKE_SOURCE_DIR}/examples/platformer)
+target_include_directories(test_platformer PRIVATE ${PROJECT_SOURCE_DIR}/examples/platformer)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test_platformer PRIVATE -Wall -Wextra)
 endif()
@@ -123,9 +123,9 @@ foreach(pge_ds_t storage settings)
     set(pge_ds_n test_${pge_ds_t}_${pge_ds_b})
     add_executable(${pge_ds_n} ${CMAKE_CURRENT_SOURCE_DIR}/test_${pge_ds_t}.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/fakes/fake_fs.cpp
-      ${CMAKE_SOURCE_DIR}/drivers/storage_${pge_ds_b}/storage_${pge_ds_b}.cpp)
+      ${PROJECT_SOURCE_DIR}/drivers/storage_${pge_ds_b}/storage_${pge_ds_b}.cpp)
     target_include_directories(${pge_ds_n} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/fakes
-      ${CMAKE_SOURCE_DIR}/drivers/storage_${pge_ds_b})
+      ${PROJECT_SOURCE_DIR}/drivers/storage_${pge_ds_b})
     if(pge_ds_b STREQUAL fatfs)
       target_compile_definitions(${pge_ds_n} PRIVATE FAKE_BIND_FATFS)
     else()
@@ -151,9 +151,9 @@ foreach(pge_hs_b fatfs littlefs)
   set(pge_hs_n test_hal_storage_${pge_hs_b})
   add_executable(${pge_hs_n} ${CMAKE_CURRENT_SOURCE_DIR}/test_hal_storage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/fakes/fake_fs.cpp
-    ${CMAKE_SOURCE_DIR}/drivers/storage_${pge_hs_b}/storage_${pge_hs_b}.cpp)
+    ${PROJECT_SOURCE_DIR}/drivers/storage_${pge_hs_b}/storage_${pge_hs_b}.cpp)
   target_include_directories(${pge_hs_n} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/fakes
-    ${CMAKE_SOURCE_DIR}/drivers/storage_${pge_hs_b})
+    ${PROJECT_SOURCE_DIR}/drivers/storage_${pge_hs_b})
   if(pge_hs_b STREQUAL fatfs)
     target_compile_definitions(${pge_hs_n} PRIVATE FAKE_BIND_FATFS)
   else()
@@ -186,26 +186,26 @@ if(pge_have_pil)
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_sprites.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h
     ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_font.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_strings.h
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/pge_assets.py selftest --emit-dir ${CMAKE_CURRENT_BINARY_DIR}/gen
-    DEPENDS ${CMAKE_SOURCE_DIR}/tools/pge_assets.py)
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/pge_assets.py selftest --emit-dir ${CMAKE_CURRENT_BINARY_DIR}/gen
+    DEPENDS ${PROJECT_SOURCE_DIR}/tools/pge_assets.py)
   # The sandbox text table is regenerated from its CSV into the build dir; sandbox_text_gen compares it with the
   # checked-in header, so game_text.h can never drift from game_text.csv.
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen/game_text.h
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/pge_assets.py strings
-      ${CMAKE_SOURCE_DIR}/examples/sandbox/game_text.csv
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/pge_assets.py strings
+      ${PROJECT_SOURCE_DIR}/examples/sandbox/game_text.csv
       --out-c ${CMAKE_CURRENT_BINARY_DIR}/gen/game_text.h --name kGameText --prefix TXT_
-    DEPENDS ${CMAKE_SOURCE_DIR}/tools/pge_assets.py ${CMAKE_SOURCE_DIR}/examples/sandbox/game_text.csv)
+    DEPENDS ${PROJECT_SOURCE_DIR}/tools/pge_assets.py ${PROJECT_SOURCE_DIR}/examples/sandbox/game_text.csv)
   add_custom_target(pge_asset_gen ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_sprites.h
     ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_font.h
     ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_strings.h ${CMAKE_CURRENT_BINARY_DIR}/gen/game_text.h)
   add_dependencies(test_asset pge_asset_gen)
   target_include_directories(test_asset PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen)
   target_compile_definitions(test_asset PRIVATE PGE_HAVE_GEN)
-  add_test(NAME tools_assets COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/pge_assets.py selftest)
-  add_test(NAME tools_memreport COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/memreport.py --selftest)
+  add_test(NAME tools_assets COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/pge_assets.py selftest)
+  add_test(NAME tools_memreport COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/memreport.py --selftest)
   add_test(NAME sandbox_text_gen COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol
-    ${CMAKE_CURRENT_BINARY_DIR}/gen/game_text.h ${CMAKE_SOURCE_DIR}/examples/sandbox/game_text.h)
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/game_text.h ${PROJECT_SOURCE_DIR}/examples/sandbox/game_text.h)
 else()
   message(STATUS "Python3 with Pillow not found: asset tool tests and the cross-language check are skipped")
 endif()
@@ -226,7 +226,7 @@ add_test(NAME ui COMMAND test_ui)
 
 add_executable(test_sandbox test_sandbox.cpp)
 target_link_libraries(test_sandbox PRIVATE pge_core pge_platform_host_null)
-target_include_directories(test_sandbox PRIVATE ${CMAKE_SOURCE_DIR}/examples/sandbox)
+target_include_directories(test_sandbox PRIVATE ${PROJECT_SOURCE_DIR}/examples/sandbox)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test_sandbox PRIVATE -Wall -Wextra)
 endif()
@@ -234,12 +234,12 @@ add_test(NAME sandbox COMMAND test_sandbox)
 
 add_executable(test_planet test_planet.cpp)
 target_link_libraries(test_planet PRIVATE pge_core pge_platform_host_null)
-target_include_directories(test_planet PRIVATE ${CMAKE_SOURCE_DIR}/examples/planet)
+target_include_directories(test_planet PRIVATE ${PROJECT_SOURCE_DIR}/examples/planet)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test_planet PRIVATE -Wall -Wextra)
 endif()
 add_test(NAME planet COMMAND test_planet)
 
 # The sandbox example may include only public pge/<name>.h headers (S6.1 done-criterion).
-add_test(NAME sandbox_includes COMMAND ${CMAKE_COMMAND} -DPGE_ROOT=${CMAKE_SOURCE_DIR}
-  -P ${CMAKE_SOURCE_DIR}/examples/sandbox/check_includes.cmake)
+add_test(NAME sandbox_includes COMMAND ${CMAKE_COMMAND} -DPGE_ROOT=${PROJECT_SOURCE_DIR}
+  -P ${PROJECT_SOURCE_DIR}/examples/sandbox/check_includes.cmake)

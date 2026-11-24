@@ -1,5 +1,5 @@
 add_library(pge_host_common STATIC host_common.cpp)
-target_include_directories(pge_host_common PUBLIC ${CMAKE_SOURCE_DIR}/hal/include ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(pge_host_common PUBLIC ${PROJECT_SOURCE_DIR}/hal/include ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_library(pge_host_storage STATIC storage_file.cpp)
 target_link_libraries(pge_host_storage PUBLIC pge_host_common)

@@ -91,7 +91,8 @@ Output goes to `docs/benchmarks/raw/host.txt` and is tagged `host`, so it is not
 | Option | Default | Meaning |
 |---|---|---|
 | `PGE_PLATFORM` | `host` | `host` or `stm32f429i_disco` (see section 2) |
-| `PGE_BUILD_TESTS` | `ON` | Build the host unit tests (`tests/`) |
+| `PGE_BUILD_TESTS` | `ON` (OFF under add_subdirectory) | Build the host unit tests (`tests/`) |
+| `PGE_BUILD_EXAMPLES` | `ON` (OFF under add_subdirectory) | Build the examples, benches and, on the F429, the example firmwares |
 | `CMAKE_BUILD_TYPE` | (none) | Use `Release` for benchmarks and firmware |
 
 ---
@@ -258,3 +259,60 @@ Test names (from `tests/CMakeLists.txt`):
 ## 6. Wrappers
 
 PlatformIO (native env only, verified), STM32CubeIDE import notes (untested), VS Code tasks (untested) and the release checklist are in `wrappers.md`. CMake stays the supported build.
+
+---
+
+## 7. Use PGE from your own CMake project
+
+A game keeps its own `CMakeLists.txt` and adds the engine with `add_subdirectory`. The second argument is needed,
+because the engine folder is outside the game folder:
+
+```cmake
+set(PGE_PLATFORM host)   # or stm32f429i_disco
+add_subdirectory(<PGE root> pge)
+```
+
+Set `PGE_PLATFORM` before `add_subdirectory`. You can set it as a normal variable or on the command line.
+For the F429, `PGE_CUBE_DIR` works the same way.
+
+A normal variable wins over the cache entry (the engine sets policy `CMP0126` to NEW), so `CMakeCache.txt` can still show `PGE_PLATFORM=host` while the F429 is built.
+
+Under `add_subdirectory`, `PGE_BUILD_EXAMPLES` and `PGE_BUILD_TESTS` default to `OFF`. So only the engine libraries
+are built. The game picks the build type. The engine sets `Release` only when it is the top-level project.
+
+Link these libraries:
+
+| Library | What it is |
+|---|---|
+| `pge_core` | The engine. C++17 is passed on to the game. |
+| `pge_platform_host` | SDL2 window, input, audio, file storage. Exists only when SDL2 is found. |
+| `pge_platform_host_null` | No window. For tests and headless tools. |
+| `pge_host_storage` | File storage only. |
+| `pge_f429_hal` | STM32F429I-DISCO board HAL, Cube HAL and BSP. |
+| `pge_f429_usb` | USB stick and FatFs storage. |
+
+Link `pge_core` first, then the platform library. Link order matters on the F429.
+
+**Host.** The engine finds SDL2 itself. Pass `-DSDL2_DIR` as in section 1.3. On Windows, copy `SDL2.dll` next to
+the game exe. The example does this with the generator expression `TARGET_RUNTIME_DLLS`, which needs CMake 3.21.
+
+**F429.** The game project enables C and ASM as well as C++. Use `project(... LANGUAGES C CXX)` plus
+`enable_language(ASM)`. Configure with the engine toolchain file, given as an absolute path. After
+`add_subdirectory`, call `pge_f429_firmware(<exe> <flash target>)`. The function comes from
+`cmake/pge_f429_firmware.cmake`. It gives the `.elf`, `.map`, `.bin` and `.hex` files and the flash target.
+
+The complete example is `examples/subproject/CMakeLists.txt`. It builds the scroller example as the game.
+Configure and build commands for the dev machine (PowerShell; PATH set as in sections 1.5 and 2.4):
+
+```powershell
+$env:PATH = "C:/Program Files/JetBrains/CLion/bin/cmake/win/x64/bin;C:/Program Files/JetBrains/CLion/bin/ninja/win/x64;C:/Program Files/JetBrains/CLion/bin/mingw/bin;$env:PATH"
+cmake -S examples/subproject -B build-sub -G Ninja -DSDL2_DIR="C:/Users/il720506/sdk/SDL2-2.32.10/x86_64-w64-mingw32/lib/cmake/SDL2"
+cmake --build build-sub --target demo
+
+$env:PATH = "C:/Program Files/JetBrains/CLion/bin/cmake/win/x64/bin;C:/Program Files/JetBrains/CLion/bin/ninja/win/x64;$env:PATH"
+cmake -S examples/subproject -B build-sub-f429 -G Ninja "-DCMAKE_TOOLCHAIN_FILE=F:/____IL_CPP/PIXEL_ENGINE/cmake/arm-none-eabi.cmake" -DCMAKE_BUILD_TYPE=Release
+cmake --build build-sub-f429 --target demo_f429
+cmake --build build-sub-f429 --target flash_demo_f429
+```
+
+The F429 lines need `arm-none-eabi-gcc` and `arm-none-eabi-g++` on PATH too, as in section 2.4.

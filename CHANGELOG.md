@@ -10,6 +10,9 @@ All notable changes to Pixel Game Engine are listed here. The format follows [Ke
 - `pge::FontRange` and the `Font::ranges` / `nranges` fields.
 - `tools/pge_assets.py font` converts a PNG glyph grid into a font blob and C header; `assetFont()` loads the blob zero-copy with validation.
 
+### Changed
+- PGE can be added to a game's own CMake project with `add_subdirectory`: engine CMake files no longer use `CMAKE_SOURCE_DIR`, `PGE_BUILD_EXAMPLES` (new) and `PGE_BUILD_TESTS` default to `OFF` in that case, `pge_f429_firmware()` moved to `cmake/pge_f429_firmware.cmake`, `pge_core` passes C++17 on to its users. Example: `examples/subproject`; see `docs/user/install.md` section 7. Host and F429 builds; nothing new run on a board.
+
 ## [0.1.1] - 2026-11-17
 
 Documentation release; no engine behaviour change. `pge_version()` returns "0.1.1".
