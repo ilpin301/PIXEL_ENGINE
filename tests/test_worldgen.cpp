@@ -241,13 +241,17 @@ static int roundAngle(int dx, int dy) {
 }
 
 static int testRoundDeterminism() {
-  // Golden checksums captured from the implementation (seed 12345), not derived independently (regenerated for the one-tile grass band).
+  // Golden checksums captured from the implementation (seed 12345), not derived independently (regenerated for the one-tile
+  // grass band, and again for the cores: the four chunks that hold core tiles changed, the two far corners did not).
   CHECK(roundChunkHash(kPlanetSpec, 0, 0, 12345) == 3393096901u);
-  CHECK(roundChunkHash(kPlanetSpec, 1, 1, 12345) == 3415786110u);
-  CHECK(roundChunkHash(kPlanetSpec, 2, 1, 12345) == 2910136831u);
+  CHECK(roundChunkHash(kPlanetSpec, 1, 1, 12345) == 433487596u);
+  CHECK(roundChunkHash(kPlanetSpec, 2, 1, 12345) == 982779125u);
   CHECK(roundChunkHash(kPlanetSpec, 3, 3, 12345) == 1600163915u);
-  CHECK(roundChunkHash(kAsteroid1Spec, 0, 0, 12345) == 1752265036u);
-  CHECK(roundChunkHash(kAsteroid2Spec, 1, 0, 12345) == 2276669784u);
+  CHECK(roundChunkHash(kAsteroid1Spec, 0, 0, 12345) == 4081954864u);
+  CHECK(roundChunkHash(kAsteroid2Spec, 1, 0, 12345) == 1138706502u);
+  // Without a core the same chunks are the old bytes (the goldens from before the cores).
+  const RoundSpec noCore = {4, 60};
+  CHECK(roundChunkHash(noCore, 1, 1, 12345) == 3415786110u && roundChunkHash(noCore, 2, 1, 12345) == 2910136831u);
   // Different prefilled buffers give identical output (all 2 x 1,024 bytes are written, no hidden state).
   uint8_t a[2][kChunkTiles], b[2][kChunkTiles];
   memset(a, 0xAA, sizeof(a));
@@ -298,6 +302,49 @@ static int testRoundSeams() {
   return 0;
 }
 
+// Core (spec): kGenCore on exactly the tiles whose centre is within s.core tiles of the grid centre (doubled offsets
+// d2 <= (2 core)^2), stone wall behind it, every other tile as without a core, core clipped to the disc, core 0 (and a
+// negative one) is no core. Hand counts: core 1 is the 2 x 2 centre block (doubled offsets (+-1, +-1); the next ring
+// has d2 10 > 4), core 2 adds (+-1, +-3) and (+-3, +-1) = 12 tiles, core 3 adds (+-1, +-5), (+-5, +-1), (+-3, +-5) and
+// (+-5, +-3) = 32 tiles.
+static int testRoundCore() {
+  static uint8_t base[32 * 32];
+  const int expect[4] = {0, 4, 12, 32};
+  for (int c = 0; c < 4; c++) {
+    const RoundSpec s = {1, 14, c}, none = {1, 14};
+    roundMap(none, 12345);
+    memcpy(base, g_rfg, sizeof(base));
+    roundMap(s, 12345);
+    int n = 0;
+    for (int ty = 0; ty < 32; ty++)
+      for (int tx = 0; tx < 32; tx++) {
+        const bool core = c > 0 && roundD2(s, tx, ty) <= sq(2L * c);
+        CHECK((g_rfg[ty * 32 + tx] == kGenCore) == core);
+        if (core) CHECK(g_rwall[ty * 32 + tx] == kGenWallStone);
+        else CHECK(g_rfg[ty * 32 + tx] == base[ty * 32 + tx]);
+        n += core;
+      }
+    CHECK(n == expect[c]);
+  }
+  // The presets all have one, with the centre tiles in it; a core wider than the disc fills the disc and nothing else.
+  for (const RoundSpec& s : kRoundSpecs) {
+    const int g = s.chunks * kChunkSize;
+    CHECK(s.core > 0);
+    roundMap(s, 12345);
+    for (int k = 0; k < 4; k++) CHECK(g_rfg[(g / 2 - 1 + k / 2) * g + g / 2 - 1 + k % 2] == kGenCore);
+  }
+  const RoundSpec huge = {1, 14, 100}, neg = {1, 14, -3}, none = {1, 14};
+  roundMap(huge, 12345);
+  for (int ty = 0; ty < 32; ty++)
+    for (int tx = 0; tx < 32; tx++)
+      CHECK((g_rfg[ty * 32 + tx] == kGenCore) == (roundD2(huge, tx, ty) <= sq(2L * huge.radius)));
+  roundMap(none, 12345);
+  memcpy(base, g_rfg, sizeof(base));
+  roundMap(neg, 12345);
+  CHECK(memcmp(base, g_rfg, sizeof(base)) == 0);
+  return 0;
+}
+
 // A radius too large for the grid (disc covers the whole 32 x 32 grid and more): the ring of tiles just outside the
 // grid and every chunk beyond it stay air in both layers; inside the grid the disc formula still applies.
 static int testRoundOversize() {
@@ -343,7 +390,10 @@ static int checkRoundShape(const RoundSpec& s, uint32_t seed) {
       if (!inside || grass) CHECK(w == 0);
       else CHECK(w == kGenWallDirt || w == kGenWallStone);
       if (inside && d2 >= sq(r2 - 4) && d2 < sq(r2 - 2)) CHECK(f == kGenDirt && w == kGenWallDirt);  // 3-4 doubled units below the rim
-      if (inside && d2 < sq(r2 - 6)) CHECK(f >= kGenStone && f <= kGenDeepOre);                         // 7 or more: stone or ore
+      const bool core = inside && s.core > 0 && d2 <= sq(2L * s.core);  // centre within core tiles of the grid centre
+      CHECK((f == kGenCore) == core);
+      if (core) CHECK(w == kGenWallStone);
+      if (inside && !core && d2 < sq(r2 - 6)) CHECK(f >= kGenStone && f <= kGenDeepOre);  // 7 or more: stone or ore
     }
   // On a ray the centre tile has d2 = (G-2i-1)^2 + 1, so the first solid tile (grass) is at i = G/2 - R.
   const int e0 = g / 2 - s.radius;
@@ -361,7 +411,10 @@ static int checkRoundShape(const RoundSpec& s, uint32_t seed) {
           CHECK(w == (i <= e0 + 7 ? kGenWallDirt : kGenWallStone));  // depth 1..7 dirt wall, depth >= 8 stone wall
           if (i == e0 + 1) CHECK(f == kGenDirt);
           else if (i == e0 + 2) CHECK(f >= kGenDirt && f <= kGenDeepOre);  // 1 or 2 dirt tiles
-          else CHECK(f >= kGenStone && f <= kGenDeepOre);                  // last index is a central tile
+          else {  // last index is a central tile; the ray tile i has d2 = (G - 2i - 1)^2 + 1
+            CHECK((f == kGenCore) == (s.core > 0 && sq(g - 2L * i - 1) + 1 <= sq(2L * s.core)));
+            CHECK(f == kGenCore || (f >= kGenStone && f <= kGenDeepOre));
+          }
         }
       }
   return 0;
@@ -416,8 +469,8 @@ static int testRoundOre() {
 }
 
 // Ore at 64 seeds (1..64): the planet has ore and deep ore at every seed. Asteroids without ore are allowed by design (user
-// decision 2026-11-23; measured over seeds 0..2000: the 2x2 asteroid lacks deep ore at 44 seeds, the 1x1 asteroid lacks ore at
-// 6 and deep ore at 417), so for them ore and deep ore only have to appear at some of the seeds.
+// decision 2026-11-23; measured over seeds 0..2000 with the 2-tile cores: the 2x2 asteroid lacks deep ore at 48 seeds, the 1x1
+// asteroid lacks ore at 7 and deep ore at 489; without the cores it was 44, 6 and 417), so for them ore and deep ore only have to appear at some of the seeds.
 static int testRoundOreSeeds() {
   int oreSeeds[3] = {0, 0, 0}, deepSeeds[3] = {0, 0, 0};
   for (uint32_t seed = 1; seed <= 64; seed++)
@@ -453,7 +506,7 @@ static int testRoundOreZones() {
       for (int tx = 0; tx < g; tx++) {
         const uint8_t f = g_rfg[ty * g + tx];
         const int depth = roundDepth(s, tx, ty);
-        if (f < kGenStone || depth < mo) continue;  // ore-eligible: stone or ore from depth R/6
+        if (f < kGenStone || f == kGenCore || depth < mo) continue;  // ore-eligible: stone or ore from depth R/6
         const int ang = roundAngle(2 * tx + 1 - g, 2 * ty + 1 - g), j = depth >> 3, open = f >= kGenOre;
         if (depth < md) { elig++; ore += f == kGenOre; }
         else { eligD++; deep += f == kGenDeepOre; }
@@ -571,6 +624,7 @@ int main() {
   if (testRoundDeterminism()) return 1;
   if (testRoundSeams()) return 1;
   if (testRoundOversize()) return 1;
+  if (testRoundCore()) return 1;
   if (testRoundShape()) return 1;
   if (testRoundGrass()) return 1;
   if (testRoundOre()) return 1;

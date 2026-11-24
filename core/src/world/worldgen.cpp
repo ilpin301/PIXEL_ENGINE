@@ -124,6 +124,8 @@ void roundTile(const RoundSpec& s, int tx, int ty, uint32_t seed, uint8_t* fg, u
   if (dx > r2 || dx < -r2 || dy > r2 || dy < -r2) return;  // also keeps d2 far from overflow
   const int d2 = dx * dx + dy * dy;
   if (d2 > r2 * r2) return;
+  const long long c2 = 2LL * s.core;  // the core disc in doubled units, 64-bit: a huge core must not overflow
+  if (s.core > 0 && d2 <= c2 * c2) { *fg = kGenCore; *wall = kGenWallStone; return; }
   const int q = r2 - isqrt(d2);  // doubled units from the tile centre to the rim
   if (q <= 2) { *fg = kGenGrass; return; }  // within one tile of the rim: every tile touching air is grass
   const int depth = q / 2;  // tiles below the rim, rounded down (ore, deep ore and wall layers use this)

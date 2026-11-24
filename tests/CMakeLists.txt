@@ -220,6 +220,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 add_test(NAME sandbox COMMAND test_sandbox)
 
+add_executable(test_planet test_planet.cpp)
+target_link_libraries(test_planet PRIVATE pge_core pge_platform_host_null)
+target_include_directories(test_planet PRIVATE ${CMAKE_SOURCE_DIR}/examples/planet)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test_planet PRIVATE -Wall -Wextra)
+endif()
+add_test(NAME planet COMMAND test_planet)
+
 # The sandbox example may include only public pge/<name>.h headers (S6.1 done-criterion).
 add_test(NAME sandbox_includes COMMAND ${CMAKE_COMMAND} -DPGE_ROOT=${CMAKE_SOURCE_DIR}
   -P ${CMAKE_SOURCE_DIR}/examples/sandbox/check_includes.cmake)

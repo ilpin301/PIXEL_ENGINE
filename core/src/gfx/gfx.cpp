@@ -126,6 +126,74 @@ void Canvas::tilemap(const TileLayer& l, int cam_x, int cam_y, uint8_t orient) {
   }
 }
 
+static int64_t floorDiv64(int64_t a, int64_t b) { int64_t q = a / b; return (a % b < 0) ? q - 1 : q; }  // b > 0
+
+// Narrows [lo, hi) to the i with 0 <= v0 + i * d < lim. Linear in i, so both ends inside means all inside; the
+// divisions run only for a row that leaves the layer. After it, every value in the span fits in 32 bits.
+static void clipSpan(int64_t v0, int32_t d, int64_t lim, int& lo, int& hi) {
+  if (lo >= hi) return;
+  const int64_t a = v0 + (int64_t)lo * d, b = v0 + (int64_t)(hi - 1) * d;
+  if (a >= 0 && a < lim && b >= 0 && b < lim) return;
+  if (d == 0) { hi = lo; return; }  // constant and outside
+  int64_t first, past;  // first i inside, and the first i after it that is outside
+  if (d > 0) { first = -floorDiv64(v0, d); past = -floorDiv64(v0 - lim, d); }
+  else { first = floorDiv64(v0 - lim, -d) + 1; past = floorDiv64(v0, -d) + 1; }
+  if (first > lo) lo = first > hi ? hi : (int)first;
+  if (past < hi) hi = past < lo ? lo : (int)past;
+}
+
+void Canvas::tilemapRotated(const TileLayer& l, int ax, int ay, int sx, int sy, int cos_q14, int sin_q14) {
+  if (!l.set || !l.tiles) return;
+  const Tileset& ts = *l.set;
+  const int tw = ts.tile_w, th = ts.tile_h;
+  if (tw == 0 || th == 0) return;
+  // shifts and masks need power-of-two tiles; Q16 in 32 bits needs a layer under 2^15 px and a step of at most 1 px
+  if ((tw & (tw - 1)) || (th & (th - 1)) || (int)l.w * tw > 32767 || (int)l.h * th > 32767 || cos_q14 < -16384 ||
+      cos_q14 > 16384 || sin_q14 < -16384 || sin_q14 > 16384) {
+    drop();
+    return;
+  }
+  int ws = 0, hs = 0;
+  while ((1 << ws) < tw) ws++;
+  while ((1 << hs) < th) hs++;
+  const int64_t limX = (int64_t)((int)l.w * tw) << 16, limY = (int64_t)((int)l.h * th) << 16;
+  const int32_t stepX = 4 * cos_q14, stepY = -4 * sin_q14;  // Q16 layer step per screen pixel; 4 * 16384 = 1.0
+  // locals: a uint16_t Color store may alias l.w and the struct fields, which would force a reload every pixel
+  const uint8_t* const tiles = l.tiles;
+  const uint8_t* const px = ts.px;
+  const Color* const pal = ts.palette;
+  const int lw = l.w, ids = ws + hs;
+  const uint32_t mx = (uint32_t)(tw - 1), my = (uint32_t)(th - 1);
+  const bool transparent = ts.transparent;
+  for (int y = by_; y < by_ + bh_; y++) {
+    // Layer point = anchor (times 65536: no shift of a negative value) + inverse turn of (pixel centre - screen point). With half-pixel integers ox, oy the Q14
+    // vector gives Q16 as 2 * (ox * c + oy * s): exact, so a quarter turn lands on exact half pixels.
+    const int64_t ox = 1 - 2 * (int64_t)sx, oy = 2 * ((int64_t)y - sy) + 1;
+    const int64_t x0 = (int64_t)ax * 65536 + 2 * (ox * cos_q14 + oy * sin_q14);
+    const int64_t y0 = (int64_t)ay * 65536 + 2 * (oy * cos_q14 - ox * sin_q14);
+    int lo = 0, hi = w_;
+    clipSpan(x0, stepX, limX, lo, hi);
+    clipSpan(y0, stepY, limY, lo, hi);
+    if (lo >= hi) continue;
+    uint32_t u = (uint32_t)(x0 + (int64_t)lo * stepX), v = (uint32_t)(y0 + (int64_t)lo * stepY);
+    Color* row = buf_ + (y - by_) * w_;
+    if (transparent) {  // index 0 is see-through
+      for (int i = lo; i < hi; i++, u += (uint32_t)stepX, v += (uint32_t)stepY) {
+        const uint32_t tx = u >> 16, ty = v >> 16;  // inside the layer, so never negative
+        const uint8_t id = tiles[(int)(ty >> hs) * lw + (int)(tx >> ws)];
+        const uint8_t idx = px[((uint32_t)id << ids) + ((ty & my) << ws) + (tx & mx)];
+        if (idx) row[i] = pal[idx];
+      }
+    } else {
+      for (int i = lo; i < hi; i++, u += (uint32_t)stepX, v += (uint32_t)stepY) {
+        const uint32_t tx = u >> 16, ty = v >> 16;  // inside the layer, so never negative
+        const uint8_t id = tiles[(int)(ty >> hs) * lw + (int)(tx >> ws)];
+        row[i] = pal[px[((uint32_t)id << ids) + ((ty & my) << ws) + (tx & mx)]];
+      }
+    }
+  }
+}
+
 int renderFrame(const RenderConfig& cfg, Color* band_buf, uint32_t band_buf_pixels, uint32_t seed,
                 RenderFn fn, void* ctx) {
   uint32_t lines = cfg.band_lines > cfg.logical_h ? cfg.logical_h : cfg.band_lines;

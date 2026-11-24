@@ -1,0 +1,49 @@
+# S8.6b planet bench on the STM32F429I-DISCO, 2026-11-23, Release -O2, read from pge_dbg_log via OpenOCD
+
+## pge_f429_planetbench (4-way camera)
+PGELOG1
+# PLANET BENCH rotate=0 char=24 samples=1800 clock_mhz=180 backbuf=1
+avg_us tick=1613 band=16651 flush=9100 frame=25751 fps=38.8
+max_us tick=1765 band=18452 flush=13602 frame=28115
+ticks_dropped=0 tick_overruns=0 draw_dropped=0
+lap ticks=1860 switches=4 gravity=D back_at_start=1
+ram data=66080 bss=72596 end=0x20021db8 estack=0x20030000 stack_hw=1024 of 57928
+arena init hw=55040 cap=65536 failed=0 band=20480 | frame hw=0 cap=4096
+sdram log used=163840 cap=163904 failed=0 section=0xd0400000..0xd0428040
+world cache_slots=16 loaded=16 chunks=4x4 change=0/32768
+chunkgen n=16 avg_us=865 max_us=1546
+dighitch entries=2048 front_us=1247 append_us=5 end=2050
+dighitch entries=8192 front_us=4971 append_us=5 end=8194
+# PLANET DONE
+
+## pge_f429_planetbench_rot (rotate view, before the tilemapRotated local-copy change)
+PGELOG1
+# PLANET BENCH rotate=1 char=24 samples=1800 clock_mhz=180 backbuf=1
+avg_us tick=2319 band=42616 flush=12019 frame=54635 fps=18.3
+max_us tick=2660 band=42713 flush=20231 frame=62849
+ticks_dropped=0 tick_overruns=0 draw_dropped=0
+lap ticks=1860 switches=4 gravity=D back_at_start=1
+ram data=66080 bss=72596 end=0x20021db8 estack=0x20030000 stack_hw=1032 of 57928
+arena init hw=55040 cap=65536 failed=0 band=20480 | frame hw=0 cap=4096
+sdram log used=163840 cap=163904 failed=0 section=0xd0400000..0xd0428040
+world cache_slots=16 loaded=16 chunks=4x4 change=0/32768
+chunkgen n=16 avg_us=865 max_us=1545
+dighitch entries=2048 front_us=1247 append_us=5 end=2050
+dighitch entries=8192 front_us=4942 append_us=5 end=8194
+# PLANET DONE
+
+## pge_f429_planetbench_rot (rotate view, after the tilemapRotated local-copy change)
+PGELOG1
+# PLANET BENCH rotate=1 char=24 samples=1800 clock_mhz=180 backbuf=1
+avg_us tick=2324 band=39343 flush=9567 frame=48911 fps=20.4
+max_us tick=2684 band=39495 flush=12626 frame=51952
+ticks_dropped=0 tick_overruns=0 draw_dropped=0
+lap ticks=1860 switches=4 gravity=D back_at_start=1
+ram data=66080 bss=72596 end=0x20021db8 estack=0x20030000 stack_hw=1040 of 57928
+arena init hw=55040 cap=65536 failed=0 band=20480 | frame hw=0 cap=4096
+sdram log used=163840 cap=163904 failed=0 section=0xd0400000..0xd0428040
+world cache_slots=16 loaded=16 chunks=4x4 change=0/32768
+chunkgen n=16 avg_us=865 max_us=1545
+dighitch entries=2048 front_us=1246 append_us=4 end=2050
+dighitch entries=8192 front_us=4969 append_us=5 end=8194
+# PLANET DONE

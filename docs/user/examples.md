@@ -1,10 +1,11 @@
 # Examples guide
 
 > **Summary for later sessions**
-> - Seven host examples in `examples/<name>/`, each a CMake target `pge_<name>` (empty, proto, gfxdemo, scroller, platformer, audiodemo, sandbox; proto's target is `pge_proto_demo`), plus the Coin Catcher tutorial in `examples/tutorial/` (targets `pge_tutorial_step1` .. `pge_tutorial_step5`, walkthrough in `docs/help/`).
+> - Eight host examples in `examples/<name>/`, each a CMake target `pge_<name>` (empty, proto, gfxdemo, scroller, platformer, audiodemo, sandbox, planet; proto's target is `pge_proto_demo`), plus the Coin Catcher tutorial in `examples/tutorial/` (targets `pge_tutorial_step1` .. `pge_tutorial_step5`, walkthrough in `docs/help/`).
 > - Windowed examples link `pge_platform_host` (SDL2). `pge_empty` links `pge_platform_host_null` (headless, no SDL).
 > - F429 firmware exists for scroller, platformer, audiodemo and sandbox (sources in `examples/f429/`).
 > - Sandbox: save/load verified on host only. On the F429 board SAVE and LOAD show NO STORAGE.
+> - Planet (S8.6a): host only; the board firmware comes in S8.6b.
 > - Game code in `examples/sandbox` may include only `"pge/<name>.h"`, `"game.h"` and a few std headers (`check_includes.cmake`).
 > - Keys: arrows or WASD (Up/W, Down/S, Left/A, Right/D), Z/J = A, X/K = B, Enter = Start, Backspace or Right Shift = Select, Esc quits.
 
@@ -43,6 +44,7 @@ The flash targets use openocd and ST-LINK and need the board attached. Firmware 
 | platformer | `pge_platformer` | `--auto`, `--overlay`, `--ticks`, `--shot` | `pge_f429_platformer`, `pge_f429_platbench`, `pge_f429_platbench_nobb` | move, Z or Up jumps, Select overlay |
 | audiodemo | `pge_audiodemo` | `--seconds`, `--bench` | `pge_f429_audio` | none (plays on start) |
 | sandbox | `pge_sandbox` | `--overlay`, `--seed`, `--ticks`, `--shot`, `--load`, `--save` | `pge_f429_sandbox`, `pge_f429_sandbench` | dig, place, craft menu |
+| planet | `pge_planet` | `--seed`, `--char`, `--core`, `--autoplay`, `--upright`, `--ticks`, `--shot`, `--load`, `--save` | none yet (S8.6b) | walk round a planet, jump, jetpack, dig |
 | tutorial | `pge_tutorial_step1` .. `pge_tutorial_step5` | `--auto`, `--ticks`, `--shot` | none | move, collect coins, Enter restarts (step 5) |
 
 The host exe path for `empty`, `proto`, `gfxdemo` and `sandbox` follows the same `build/examples/<name>/` layout as the examples toolchain.md names explicitly.
@@ -152,6 +154,48 @@ The host exe path for `empty`, `proto`, `gfxdemo` and `sandbox` follows the same
   - `pge_f429_sandbench`: autoplay bench, back buffer. Flash: `flash_f429_sandbench`.
   - Chunk cache 12 slots and change log 2048 entries (`SANDBOX_CACHE`, `SANDBOX_CHANGE_CAP`).
   - The bench runs 60 warm-up ticks plus 1800 samples (about 31 s). Wait about 50 s after flashing, then read `pge_dbg_log`. The log ends with `# SANDBOX DONE`, LED4 lights, and it prints RAM figures and chunk generation times.
+
+## planet (`pge_planet`)
+
+- **Shows:** a round 4 by 4 chunk planet (`roundGen`, radius 52 tiles, 8 px tiles, seeded; default seed 12345) and one character that walks all the way around it. Gravity points to the planet centre in four directions and switches at the diagonals; the camera turns by 90 degrees with it behind a short black iris (10 ticks, input ignored). Walk and aim work in the screen frame, so holding right keeps going the same way around after every turn. Also jump, a jetpack without fuel, a dig mode (hold A), digging into the change log (32768 entries) and save/load. The character is a placeholder sheet, 16 x 32 px (default) or 16 x 24 px, shown a third of the way down the screen (its centre at row 80 of 240, `PlanetGame::kCharY`) instead of in the middle, so more ground shows below it. Aim and dig work on a 2 x 2 tile zone just outside the body. The centre of the planet is an unbreakable core (`kGenCore`, dark red with a glowing middle, 6 tiles = 48 px radius by default): dig and touch skip it, so a character that digs towards the centre has to dig around it and cannot reach the point where the direction to the centre swings. It is drawn along the radial axis of the planet, leaning up to 45 degrees in 9 steps of 11.25 degrees (the engine blit has only 8 orientations, so the game pre-builds rotated copies of the frames, 23 KB of RAM); collision and gravity stay 4-way, and `--upright` switches to the plain upright drawing for comparison.
+- **Host target:** `pge_planet` (`build/examples/planet/pge_planet.exe`).
+- **Compass:** in both views a small dial in the top-right corner has an arrow through its centre that points to the top of the planet (world up) as the picture shows it: bright tip with a "U", dim tail with a "D". In the 4-way view it turns in quarter turns with the camera, in `--rotate` it follows the view.
+- **Flags:**
+  - `--seed N`: world seed (default 12345).
+  - `--char 24|32`: character height in px (default 32).
+  - `--core N`: radius in tiles of the unbreakable core at the planet centre (default 6, 0 = none, at most 26). The F429 firmware takes the same number as the compile define `PLANET_CORE` (default the same): `cmake -DPLANET_CORE=N` for the `pge_f429_planet*` targets, to try sizes on the board.
+  - `--autoplay`: run the scripted bot, which holds right and jumps when stuck.
+  - `--upright`: draw the character upright (no lean along the radial axis).
+  - `--rotate`: turn the whole world smoothly with the planet instead of the 90 degree snap: screen-up always points away from the planet centre, the character is upright and stays on the vertical centre line at that screen row, no iris and no input freeze (`Canvas::tilemapRotated`; `--upright` has no effect).
+    The view turns at most 2 degrees per tick (walking on the surface turns about 0.2) and holds its angle within 48 px of the planet centre (`kHoldPx`), so flying about a dug-out centre does not make the picture jerk. Leaving that circle, the view swings to the new direction at 2 degrees per tick. Inside it gravity can still flip, which turns the 4-way control frame while the picture stays still, so screen Right may walk a different way there.
+    Physics and controls stay 4-way, so walk direction, jump direction and gravity still kink at the diagonals; only the picture is smooth. After an 8 px step-up or a fall the character can sit a few px above or below its screen row for a few ticks (it stays on the vertical centre line).
+  - `--ticks N`: quit after N ticks.
+  - `--shot out.bmp`: save the window to a BMP after the loop.
+  - `--load`: load the save at startup.
+  - `--save PATH`: save file (default `planet.sav`).
+- **Keys:**
+  - Left and Right walk. Up jumps; held in the air it is the jetpack. On the F429 board the stick's up direction is Up, so it jumps and flies.
+  - Hold Z (board: the first button, A) for dig mode: gravity is off and the character moves in any direction the stick points (analog, all directions on the board; the host arrows give 8 directions), at 0.75 px per tick, digging every breakable tile in its way; the unbreakable core still stops it. Release to walk again.
+  - X digs the aimed 2 x 2 tiles (every breakable tile of the zone, which sits just outside the body). Up and Down or WASD aim (none = the zone in front); Up also jumps, WASD aims without jumping. In `--rotate` the aim offset is turned with the view, so up and down are straight above and below the upright character on the screen.
+  - A left click (host) or a touch (board) digs the 2 x 2 zone around the touched point, once per touch, at any distance (no reach limit yet). It is ignored during the 4-way iris turn.
+  - Backspace (Select) switches the character between 24 and 32 px tall if there is room.
+  - Enter saves. Esc quits.
+- **Core size [measured, host]:** the numbers behind the default of 6 tiles. Scenario: all breakable rock dug out of a round cavity of 14 tiles around the centre (the core stays), the rotating view, 9 scripted runs of 600 ticks (right, left, jetpack and mixes from three start poses, 5,400 ticks per row, 32 px character). "Closest" is the body centre to the planet centre; "inside 48 px" counts the ticks inside the hold radius where the view stops following; "at the 2 degree limit" counts ticks over 1.9 degrees of view turn (no row ever turned more than 2.01 degrees or showed a jump over 4.1 px).
+
+  | Core radius | Diameter | Closest | Inside 48 px | At the 2 degree limit | Gravity switches |
+  |---|---|---|---|---|---|
+  | 0 | none | 0.0 px | 3,965 | 768 | 442 |
+  | 1 | 16 px | 17.9 px | 2,669 | 1,155 | 131 |
+  | 2 | 32 px | 28.8 px | 2,283 | 1,169 | 84 |
+  | 3 | 48 px | 40.0 px | 1,550 | 983 | 66 |
+  | 4 | 64 px | 45.3 px | 346 | 900 | 46 |
+  | 5 | 80 px | 51.2 px | 0 | 509 | 63 |
+  | 6 | 96 px | 60.9 px | 0 | 169 | 27 |
+
+  The guess of about 20 px across (radius 1) is not enough: the body centre still gets to 18 px of the centre and spends half the time inside the hold radius. The 24 px character needs the same or more (inside 48 px: 1,137 ticks at radius 4, none from radius 5). Radius 5 would be the first one that keeps the body out of the hold radius, but it leaves only 2 px of margin and traps the 32 px character in a gravity flip-flop at the core corner (the bot walks round a cavity in both directions from four start columns: at radius 1 and 5 all 8 runs flip gravity back and forth about 135 times in 1,500 ticks and never complete a lap; radii 2, 3, 4, 6, 7 and 8 go round normally, and so does the 24 px character at every radius). Radius 6 never enters the hold radius (closest 60.9 px for 32 px, 57.3 px for 24 px), has no flip-flop, and the view stays at the 2 degree limit for a few percent of the ticks (stair steps of the core, jetpack and falls; plain walking at that distance turns about 1.4 degrees per tick, computed as 1.5 px per tick over 61 px). `tests/test_planet.cpp` (`testCoreWalk`) keeps those three properties for both sizes in both views.
+  A save stores only the edits, not the core size: a save made without a core (or with another core radius) digs its tiles through the new core when loaded (checked: a 20 x 20 tile cavity saved at core 0 removed all 112 core tiles of the centre block at core 6). Delete `planet.sav` before trying another size, and on the board before the first flash with a core.
+- **Screenshots:** `docs/help/img/example-planet-char24.png` and `example-planet-char32.png`; `example-planet-tilt.png` shows the lean just before the first gravity switch.
+- **Status:** host only. The board firmware (change log in external SDRAM, bench) comes in S8.6b.
 
 ## tutorial (`pge_tutorial_step1` .. `pge_tutorial_step5`)
 

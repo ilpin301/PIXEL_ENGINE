@@ -130,3 +130,27 @@ endfunction()
 pge_f429_sandbox(pge_f429_sandbox flash_f429_sandbox 0 1 1)
 # bench keeps the storage stubs and 180 MHz so stage6.md numbers stay comparable
 pge_f429_sandbox(pge_f429_sandbench flash_f429_sandbench 1 1 0)
+
+# Planet example (S8.6b): one main source, compile-time switches PLANET_BENCH (autoplay + log summary), PLANET_USB (USB
+# stick saves, 168 MHz) and PLANET_ROTATE (the world turns with the planet); the vsync back buffer is always on. The
+# change log lives in SDRAM (.sdram), so no switch for it. cmake -DPLANET_CORE=N sets the radius in tiles of the unbreakable
+# planet core (default: PlanetGame::kCoreDefault) for all planet targets.
+function(pge_f429_planet tgt flash_tgt bench usb rotate)
+  add_executable(${tgt} ${CMAKE_SOURCE_DIR}/examples/f429/planet_main.cpp)
+  target_include_directories(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/examples/planet)
+  target_compile_definitions(${tgt} PRIVATE PLANET_BENCH=${bench} PLANET_USB=${usb} PLANET_ROTATE=${rotate})
+  if(DEFINED PLANET_CORE)
+    target_compile_definitions(${tgt} PRIVATE PLANET_CORE=${PLANET_CORE})
+  endif()
+  if(usb)
+    target_link_libraries(${tgt} PRIVATE pge_core pge_f429_usb pge_f429_hal)
+  else()
+    target_link_libraries(${tgt} PRIVATE pge_core pge_f429_hal)
+  endif()
+  pge_f429_firmware(${tgt} ${flash_tgt})
+endfunction()
+pge_f429_planet(pge_f429_planet flash_f429_planet 0 1 0)
+pge_f429_planet(pge_f429_planet_rot flash_f429_planet_rot 0 1 1)
+# bench keeps the storage stubs and 180 MHz, like the sandbench
+pge_f429_planet(pge_f429_planetbench flash_f429_planetbench 1 0 0)
+pge_f429_planet(pge_f429_planetbench_rot flash_f429_planetbench_rot 1 0 1)

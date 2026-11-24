@@ -11,8 +11,9 @@
 
 namespace pge {
 
-// Foreground tile ids written by terrainGen. flatGen (placeholder) uses 1 grass, 2 dirt and wall id 3.
-enum GenTile : uint8_t { kGenGrass = 1, kGenDirt = 2, kGenStone = 3, kGenOre = 4, kGenDeepOre = 5 };
+// Foreground tile ids written by terrainGen. flatGen (placeholder) uses 1 grass, 2 dirt and wall id 3. kGenCore is only
+// written by roundGen (the core of a round world); a game marks it solid and not breakable.
+enum GenTile : uint8_t { kGenGrass = 1, kGenDirt = 2, kGenStone = 3, kGenOre = 4, kGenDeepOre = 5, kGenCore = 6 };
 // Wall-layer ids written by terrainGen (0 = none above the surface).
 enum GenWall : uint8_t { kGenWallDirt = 1, kGenWallStone = 2 };
 
@@ -38,24 +39,27 @@ void terrainGen(uint8_t* fg, uint8_t* wall, int cx, int cy, uint32_t seed);
 // A tile outside the grid or outside the disc (so every chunk outside the grid) comes out as air (0) in both layers.
 // shortcut: perfectly round surface (no hills); upgrade if the example looks dull.
 // shortcut: no caves; upgrade if the example looks dull.
-// shortcut: innermost layer is stone/ore (no separate core id); upgrade if the example looks dull.
 // shortcut: dirt thickness is patchy per 64 pseudo-angle buckets, independent hashes (intended)
 
-// Grid is chunks x chunks chunks (chunks * 32 tiles per side); radius is the disc radius in tiles.
+// Grid is chunks x chunks chunks (chunks * 32 tiles per side); radius is the disc radius in tiles; core is the radius in
+// tiles of the kGenCore disc at the grid centre (0 = none). A game keeps the core unbreakable, so a character that digs
+// towards the centre cannot reach it: near the exact centre the direction to it swings with a few pixels of motion.
 struct RoundSpec {
   int chunks;
   int radius;
+  int core = 0;
 };
 
-constexpr RoundSpec kPlanetSpec = {4, 60};      // 128 x 128 tiles
-constexpr RoundSpec kAsteroid1Spec = {1, 14};   // 32 x 32 tiles
-constexpr RoundSpec kAsteroid2Spec = {2, 29};   // 64 x 64 tiles
+constexpr RoundSpec kPlanetSpec = {4, 60, 3};      // 128 x 128 tiles, core 6 tiles across
+constexpr RoundSpec kAsteroid1Spec = {1, 14, 2};   // 32 x 32 tiles, core 4 tiles across
+constexpr RoundSpec kAsteroid2Spec = {2, 29, 2};   // 64 x 64 tiles, core 4 tiles across
 
 // Reference per-tile form of roundGen: tile (tx, ty) in world coordinates, written to *fg and *wall. A tile outside the
 // grid or outside the disc is air in both layers, even if the radius is too large for the grid.
 // Layers from the rim inwards: grass (every tile whose centre is within one tile of the rim, so every solid tile that
 // touches air), 1-2 dirt (patchy by direction), stone with ore zones by direction and depth (depth = whole tiles below
-// the rim, see docs/user/api-world.md).
+// the rim, see docs/user/api-world.md). Every tile whose centre is within s.core tiles of the grid centre is kGenCore
+// (stone wall behind it) instead, clipped to the disc.
 void roundTile(const RoundSpec& s, int tx, int ty, uint32_t seed, uint8_t* fg, uint8_t* wall);
 
 // Fills chunk (cx, cy) of the round world s (kChunkTiles bytes each for fg and wall, row-major); equals roundTile.

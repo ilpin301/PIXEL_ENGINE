@@ -2,6 +2,8 @@
 // an independent reference model compared with full and band rendering (own mock display HAL). S8.4a adds the
 // orientation tests (orient 0..3): turnRect and Camera units, the reference model and the golden scene under every
 // orient, the gravity-to-orient anchor, sprite == tile, and the eight orientations of a sprite.
+// Canvas::tilemapRotated is checked against tilemap at quarter turns, a double-precision model at other angles, bands,
+// edges and drops.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -635,9 +637,222 @@ static int testEightOrientations() {
   return 0;
 }
 
+// ---- 9. tilemapRotated: any-angle draw of a tile layer ----
+// Layer: 5 x 4 tiles of 4 x 4 px (20 x 16 px). Tile t pixel i has index t * 16 + i, so every layer pixel differs;
+// tile 0 instead has index 0 on every fifth pixel (4 per cell), so a transparent tileset has holes.
+enum { RTW = 5, RTH = 4, RPW = 20, RPH = 16, RTILES = 6 };
+static uint8_t g_rpx[RTILES * 16];
+static Color g_rpal[256];
+static uint8_t g_rmap[RTW * RTH];
+static Tileset g_rts, g_rtsT;  // opaque and transparent
+
+static void buildRotLayer() {
+  for (int t = 0; t < RTILES; t++)
+    for (int i = 0; i < 16; i++) g_rpx[t * 16 + i] = (uint8_t)(t == 0 && i % 5 == 0 ? 0 : t * 16 + i);
+  for (int i = 0; i < 256; i++) g_rpal[i] = (Color)(0x300 + i);
+  for (int i = 0; i < RTW * RTH; i++) g_rmap[i] = (uint8_t)((i * 7 + i / RTW) % RTILES);
+  g_rts = Tileset{g_rpx, g_rpal, 4, 4, false};
+  g_rtsT = Tileset{g_rpx, g_rpal, 4, 4, true};
+}
+
+// Layer pixel (x, y), 0 <= x < RPW, 0 <= y < RPH, as an index
+static int layerIdx(int x, int y) { return g_rpx[g_rmap[(y / 4) * RTW + x / 4] * 16 + (y % 4) * 4 + x % 4]; }
+
+struct RotArgs { TileLayer l; int ax, ay, sx, sy, c, s; };
+static void rotJob(Canvas& cv, void* p) {
+  const RotArgs& a = *static_cast<const RotArgs*>(p);
+  cv.tilemapRotated(a.l, a.ax, a.ay, a.sx, a.sy, a.c, a.s);
+}
+struct MapArgs { TileLayer l; int cx, cy, o; };
+static void mapJob(Canvas& cv, void* p) {
+  const MapArgs& a = *static_cast<const MapArgs*>(p);
+  cv.tilemap(a.l, a.cx, a.cy, (uint8_t)a.o);
+}
+
+// One frame of w x h through renderFrame with bands of "band" rows, into out.
+static int renderTo(Color* out, int w, int h, int band, RenderFn fn, void* ctx) {
+  static Color bb[MAXPX];
+  mockReset(w, h);
+  RenderConfig cfg = {(uint16_t)w, (uint16_t)h, (uint16_t)band, kClear};
+  if (renderFrame(cfg, bb, MAXPX, 0, fn, ctx) != 0) return 1;
+  std::memcpy(out, g_fb, (size_t)w * h * sizeof(Color));
+  return 0;
+}
+
+// Anchor that makes angle o * 90 degrees equal tilemap(cam, orient o) on a sw x sh screen with the anchor at (sx, sy).
+// tilemap shows the world pixel (cam + (u, v)) at screen pixel (px, py), (u, v) = invTurn: o1 (py, sw - 1 - px),
+// o2 (sw - 1 - px, sh - 1 - py), o3 (sh - 1 - py, px). tilemapRotated samples A + R^-1 (P + 1/2 - S) with the clockwise
+// turn R^-1 (dx, dy) = (dx c + dy s, -dx s + dy c): o1 (c, s) = (0, 1) gives (dy, -dx), o2 (-1, 0) gives (-dx, -dy),
+// o3 (0, -1) gives (-dy, dx). Matching the two, term by term, gives these anchors.
+static void anchorFor(int o, int cam_x, int cam_y, int sx, int sy, int sw, int sh, int& ax, int& ay) {
+  switch (o & 3) {
+    case 0: ax = cam_x + sx; ay = cam_y + sy; break;
+    case 1: ax = cam_x + sy; ay = cam_y + sw - sx; break;
+    case 2: ax = cam_x + sw - sx; ay = cam_y + sh - sy; break;
+    default: ax = cam_x + sh - sy; ay = cam_y + sx; break;
+  }
+}
+
+static int testRotatedCardinal() {
+  buildRotLayer();
+  static const int cs[4][2] = {{16384, 0}, {0, 16384}, {-16384, 0}, {0, -16384}};
+  static const int pos[][4] = {{0, 0, 0, 0}, {3, -2, 5, 4},  {-6, 7, -3, 2},
+                              {0, 0, 9, 1}, {20, 16, 0, 0}, {-30, 40, 7, 7}};
+  static Color want[MAXPX], got[MAXPX];
+  for (int o = 0; o < 4; o++) {
+    const int sw = (o & 1) ? 16 : 20, sh = (o & 1) ? 20 : 16;
+    for (const auto& p : pos) {
+      int ax, ay;
+      anchorFor(o, p[0], p[1], p[2], p[3], sw, sh, ax, ay);
+      for (const Tileset* ts : {&g_rts, &g_rtsT}) {
+        MapArgs m{TileLayer{g_rmap, RTW, RTH, ts}, p[0], p[1], o};
+        RotArgs r{TileLayer{g_rmap, RTW, RTH, ts}, ax, ay, p[2], p[3], cs[o][0], cs[o][1]};
+        CHECK(renderTo(want, sw, sh, sh, mapJob, &m) == 0);
+        CHECK(renderTo(got, sw, sh, sh, rotJob, &r) == 0);
+        char tag[96];
+        std::snprintf(tag, sizeof tag, "rotated %d deg vs tilemap orient %d cam=(%d,%d) S=(%d,%d) transparent=%d",
+                      o * 90, o, p[0], p[1], p[2], p[3], ts == &g_rtsT);
+        CHECK(samePic(tag, want, got, sw, sh));
+      }
+    }
+  }
+  return 0;
+}
+
+// Straight from the contract in doubles: the layer point under the centre of screen pixel P is A + R^-1 (P + 1/2 - S).
+// All numbers are dyadic and small, so the doubles are exact and floor() agrees with the engine bit for bit.
+static void rotRef(const Tileset& ts, int ax, int ay, int sx, int sy, int c, int s, int w, int h, Color* out) {
+  const double cc = c / 16384.0, ss = s / 16384.0;
+  for (int py = 0; py < h; py++)
+    for (int px = 0; px < w; px++) {
+      const double dx = px + 0.5 - sx, dy = py + 0.5 - sy;
+      const int lx = (int)std::floor(ax + dx * cc + dy * ss), ly = (int)std::floor(ay - dx * ss + dy * cc);
+      Color v = kClear;
+      if (lx >= 0 && lx < RPW && ly >= 0 && ly < RPH) {
+        const int idx = layerIdx(lx, ly);
+        if (idx || !ts.transparent) v = g_rpal[idx];
+      }
+      out[py * w + px] = v;
+    }
+}
+
+enum { RSW = 32, RSH = 24 };
+
+static int testRotatedReference() {
+  static const int cs[][2] = {{9830, 13107},  {13107, 9830},  {-9830, 13107}, {-13107, -9830}, {9830, -13107},
+                              {16384, 0},     {0, -16384},    {12, -16383},   {-16383, 12},    {11585, 11585}};
+  static const int pos[][4] = {{10, 8, 16, 12}, {0, 0, 20, 3}, {25, -4, 5, 30}, {10, 8, -6, 9}, {200, 150, 3, 3}};
+  static Color want[MAXPX], got[MAXPX];
+  int hit = 0, miss = 0;  // frames that draw something / that miss the layer completely
+  for (const Tileset* ts : {&g_rts, &g_rtsT})
+    for (const auto& a : cs)
+      for (const auto& p : pos) {
+        RotArgs r{TileLayer{g_rmap, RTW, RTH, ts}, p[0], p[1], p[2], p[3], a[0], a[1]};
+        rotRef(*ts, p[0], p[1], p[2], p[3], a[0], a[1], RSW, RSH, want);
+        CHECK(renderTo(got, RSW, RSH, RSH, rotJob, &r) == 0);
+        char tag[96];
+        std::snprintf(tag, sizeof tag, "rotated (%d,%d) A=(%d,%d) S=(%d,%d) transparent=%d", a[0], a[1], p[0], p[1],
+                      p[2], p[3], ts == &g_rtsT);
+        CHECK(samePic(tag, want, got, RSW, RSH));
+        int drawn = 0;
+        for (int i = 0; i < RSW * RSH; i++) drawn += got[i] != kClear;
+        hit += drawn > 0;
+        miss += drawn == 0;
+      }
+  CHECK(hit >= 60 && miss >= 20);  // the anchor {200, 150} is far outside the layer, so some frames draw nothing
+  return 0;
+}
+
+static int testRotatedBands() {
+  const int c = 9830, s = 13107;  // (3, 4) / 5 in Q14
+  RotArgs r{TileLayer{g_rmap, RTW, RTH, &g_rtsT}, 10, 8, 16, 12, c, s};
+  static Color full[MAXPX], got[MAXPX];
+  CHECK(renderTo(full, RSW, RSH, RSH, rotJob, &r) == 0);
+  int drawn = 0;
+  for (int i = 0; i < RSW * RSH; i++) drawn += full[i] != kClear;
+  CHECK(drawn > 100 && drawn < RSW * RSH);
+  for (int b : {1, 7, 16}) {
+    CHECK(renderTo(got, RSW, RSH, b, rotJob, &r) == 0);
+    char tag[64];
+    std::snprintf(tag, sizeof tag, "rotated band=%d vs full", b);
+    CHECK(samePic(tag, full, got, RSW, RSH));
+  }
+  return 0;
+}
+
+static int testRotatedEdges() {
+  static Color got[MAXPX], want[MAXPX];
+  // transparent: the angle-0 picture at S == A is the layer itself; index 0 leaves the clear colour, opaque draws it
+  for (const Tileset* ts : {&g_rts, &g_rtsT}) {
+    RotArgs r{TileLayer{g_rmap, RTW, RTH, ts}, 0, 0, 0, 0, 16384, 0};
+    CHECK(renderTo(got, RPW, RPH, RPH, rotJob, &r) == 0);
+    int holes = 0;
+    for (int y = 0; y < RPH; y++)
+      for (int x = 0; x < RPW; x++) {
+        const int idx = layerIdx(x, y);
+        const bool hole = ts->transparent && idx == 0;
+        holes += hole;
+        CHECK(got[y * RPW + x] == (hole ? kClear : g_rpal[idx]));
+      }
+    CHECK(ts->transparent ? holes > 0 : holes == 0);
+  }
+  // outside: the 20 x 16 layer at screen (6, 5) on a 32 x 24 screen; everything else stays the clear colour
+  RotArgs r{TileLayer{g_rmap, RTW, RTH, &g_rts}, 0, 0, 6, 5, 16384, 0};
+  CHECK(renderTo(got, RSW, RSH, RSH, rotJob, &r) == 0);
+  for (int y = 0; y < RSH; y++)
+    for (int x = 0; x < RSW; x++) {
+      const bool in = x >= 6 && x < 6 + RPW && y >= 5 && y < 5 + RPH;
+      CHECK(got[y * RSW + x] == (in ? g_rpal[layerIdx(x - 6, y - 5)] : kClear));
+    }
+  // huge coordinates: anchor and screen point a billion pixels away, offset by the same amount, equal the plain case
+  r = RotArgs{r.l, 10, 8, 0, 0, 16384, 0};
+  CHECK(renderTo(want, RSW, RSH, RSH, rotJob, &r) == 0);
+  r = RotArgs{r.l, 10 - 1500000000, 8 + 1500000000, -1500000000, 1500000000, 16384, 0};
+  CHECK(renderTo(got, RSW, RSH, RSH, rotJob, &r) == 0);
+  CHECK(samePic("far anchor", want, got, RSW, RSH));
+  r = RotArgs{r.l, 10, 8, 2000000000, -2000000000, 9830, 13107};  // far away on screen: nothing hits the layer
+  CHECK(renderTo(got, RSW, RSH, RSH, rotJob, &r) == 0);
+  for (int i = 0; i < RSW * RSH; i++) CHECK(got[i] == kClear);
+
+  // drops and silent returns, on a canvas that starts at row 0
+  static Color buf[RSW * RSH];
+  const TileLayer ok{g_rmap, RTW, RTH, &g_rts};
+  const Tileset odd_w{g_rpx, g_rpal, 3, 4, false}, odd_h{g_rpx, g_rpal, 4, 6, false}, zero{g_rpx, g_rpal, 0, 4, false};
+  const Tileset big{g_rpx, g_rpal, 128, 128, false};
+  const TileLayer wide{g_rmap, 300, 1, &big}, tall{g_rmap, 1, 300, &big};  // 38,400 px: over 32767
+  struct Case { TileLayer l; int c, s; int drops; };
+  const Case cases[] = {
+      {ok, 16384, 0, 0},
+      {TileLayer{g_rmap, RTW, RTH, &odd_w}, 16384, 0, 1},
+      {TileLayer{g_rmap, RTW, RTH, &odd_h}, 16384, 0, 1},
+      {wide, 16384, 0, 1},
+      {tall, 16384, 0, 1},
+      {ok, 16385, 0, 1},
+      {ok, 0, -16385, 1},
+      {TileLayer{g_rmap, RTW, RTH, &zero}, 16384, 0, 0},
+      {TileLayer{g_rmap, RTW, RTH, nullptr}, 16384, 0, 0},
+      {TileLayer{nullptr, RTW, RTH, &g_rts}, 16384, 0, 0},
+  };
+  for (const Case& k : cases) {
+    for (Color& v : buf) v = kClear;
+    Canvas cv(buf, RSW, RSH, 0, RSH, 0);
+    cv.tilemapRotated(k.l, 0, 0, 0, 0, k.c, k.s);
+    CHECK(cv.dropped() == k.drops);
+    int drawn = 0;
+    for (Color v : buf) drawn += v != kClear;
+    CHECK(&k == cases ? drawn > 0 : drawn == 0);  // only the first case draws
+  }
+  // a band below row 0 does not count the drop (the frame counts it once)
+  Canvas lower(buf, RSW, RSH, 8, 8, 0);
+  lower.tilemapRotated(TileLayer{g_rmap, RTW, RTH, &odd_w}, 0, 0, 0, 0, 16384, 0);
+  CHECK(lower.dropped() == 0);
+  return 0;
+}
+
 int main() {
   if (testUnits() || testOrientUnits() || testGolden() || testBandsAndReference() || testTurnedGolden() ||
-      testGravityAnchor() || testSpriteEqualsTile() || testEightOrientations())
+      testGravityAnchor() || testSpriteEqualsTile() || testEightOrientations() || testRotatedCardinal() ||
+      testRotatedReference() || testRotatedBands() || testRotatedEdges())
     return 1;
   std::printf("camera OK\n");
   return 0;

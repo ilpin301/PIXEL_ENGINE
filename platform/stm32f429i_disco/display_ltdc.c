@@ -60,6 +60,8 @@ pge_error pge_hal_display_init(uint16_t want_w, uint16_t want_h, pge_display_inf
 
   if (!s_hw_ready) {
     if (BSP_LCD_Init() != LCD_OK) return -1;   /* also inits SDRAM */
+    /* BSP REFRESH_COUNT 1386 assumes 180 MHz; USB builds run 168 MHz -> 68.5 ms refresh, over the 64 ms spec */
+    FMC_Bank5_6->SDRTR = (FMC_Bank5_6->SDRTR & ~0x3FFEu) | (((SystemCoreClock / 2u / 64000u - 20u) << 1) & 0x3FFEu);
     LTDC_LayerCfgTypeDef cfg = {0};
     cfg.WindowX0 = 0;
     cfg.WindowX1 = PAN_W;

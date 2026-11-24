@@ -150,6 +150,7 @@ world bottom is simply where `h_chunks` ends.
 | `kGenStone` | 3 | foreground |
 | `kGenOre` | 4 | foreground |
 | `kGenDeepOre` | 5 | foreground |
+| `kGenCore` | 6 | foreground, written only by `roundTile` / `roundGen` (the core of a round world); a game should mark it solid and not breakable |
 | `kGenWallDirt` | 1 | wall-layer id written by `terrainGen` (0 = none above the surface) |
 | `kGenWallStone` | 2 | wall-layer id |
 
@@ -175,14 +176,14 @@ Enums: `GenTile : uint8_t` (foreground), `GenWall : uint8_t` (wall). `flatGen` u
 
 ### Round worlds (planets and asteroids)
 
-A disc in a square grid of chunks, as a pure integer function of (tile coords, seed) with the same hash/noise helpers and tile ids as `terrainGen` (no new tile ids). Host tested only; generation cost on the F429 is not measured.
+A disc in a square grid of chunks, as a pure integer function of (tile coords, seed) with the same hash/noise helpers and tile ids as `terrainGen`, plus `kGenCore` for the core at the centre. Host tested only; generation cost on the F429 is not measured.
 
 | Name | Value | Meaning |
 |---|---|---|
-| `RoundSpec` | `int chunks; int radius;` | grid is `chunks` x `chunks` chunks (`chunks * 32` tiles per side); `radius` = disc radius in tiles |
-| `kPlanetSpec` | `{4, 60}` | 128 x 128 tiles |
-| `kAsteroid1Spec` | `{1, 14}` | 32 x 32 tiles |
-| `kAsteroid2Spec` | `{2, 29}` | 64 x 64 tiles |
+| `RoundSpec` | `int chunks; int radius; int core = 0;` | grid is `chunks` x `chunks` chunks (`chunks * 32` tiles per side); `radius` = disc radius in tiles; `core` = radius in tiles of the `kGenCore` disc at the grid centre, 0 = none (so `{4, 60}` is the planet without a core) |
+| `kPlanetSpec` | `{4, 60, 3}` | 128 x 128 tiles, core 6 tiles across |
+| `kAsteroid1Spec` | `{1, 14, 2}` | 32 x 32 tiles, core 4 tiles across |
+| `kAsteroid2Spec` | `{2, 29, 2}` | 64 x 64 tiles, core 4 tiles across |
 
 | Signature | Meaning |
 |---|---|
@@ -199,10 +200,11 @@ Rules for round worlds:
 - Grass: every solid tile whose centre is within one tile of the rim (`2 * radius - isqrt(d2) <= 2`), so every solid tile with a 4-neighbour outside the disc is grass; where the rim runs diagonally a few tiles behind the edge are grass too. Grass has no wall.
 - Foreground below the grass: 1-2 dirt tiles (patchy by direction), then stone, `kGenOre` from depth `radius / 6` and `kGenDeepOre` from depth `2 * radius / 3` in zones that depend on direction and depth. For `kPlanetSpec` these depths (10 and 40) equal `kGenOreMinDepth` and `kGenDeepOreMinDepth`.
 - Ore is not guaranteed in asteroids: for some seeds an asteroid has no `kGenOre` or no `kGenDeepOre`; the planet preset (`kPlanetSpec`) always has both.
+- Core: a tile whose doubled-centre distance squared to the grid centre is <= `(2 * core)^2` is `kGenCore` with `kGenWallStone` behind it, whatever its depth (clipped to the disc, so a core of `radius` or more fills the disc; `core <= 0` is no core). It is a tile staircase, not a smooth disc: the middle rows span `core` tiles on each side of the grid centre line, so `core` 1 is the 2 x 2 centre block, 2 is 12 tiles and 3 is 32 tiles. A game marks `kGenCore` solid and not breakable, so a character that digs towards the centre stops at the core instead of reaching the point where the direction to the centre swings with a few pixels of motion. The presets carry 3 (planet) and 2 (asteroids); they were not measured with a character on a board, and the planet example needed 6 tiles for a 16 x 32 px character on 8 px tiles (see `examples.md`, planet).
 - Wall layer (not under grass): `kGenWallDirt` for depth < 8, then `kGenWallStone`.
 - Gravity points toward the centre: right of it gives `Left`, below it gives `Up`. The larger axis offset wins; an exact diagonal tie goes to the vertical axis, and the centre itself gives `Down`.
 - `GenFn` has no context argument, so each wrapper has its size baked in. A game with another size calls `roundGen` with its own `RoundSpec` from its own `GenFn`.
-- Shortcuts (noted in the header): perfectly round surface (no hills), no caves, no core tile id (the innermost layer is stone or ore).
+- Shortcuts (noted in the header): perfectly round surface (no hills), no caves, the core is solid (no cavity, no ore inside).
 
 ## pge/entity.h
 

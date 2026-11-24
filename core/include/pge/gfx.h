@@ -60,6 +60,17 @@ class Canvas {
   // camera.h for Camera and parallax layers. "orient" = clockwise quarter turns applied to the whole world picture
   // before it is shown, 0..3 (only the low 2 bits count); each tile is drawn turned by orient.
   void tilemap(const TileLayer& l, int cam_x, int cam_y, uint8_t orient = 0);
+  // The layer picture turned clockwise on screen (y down) by any angle about the layer-pixel point (ax, ay) (layer
+  // pixel = tile index * tile size + pixel within the tile), which lands at screen point (sx, sy). The angle is a unit
+  // vector in Q14 (16384 = 1.0): cos_q14, sin_q14. Same direction as orient: a clockwise quarter turn maps the offset
+  // (x, y) from the anchor to (-y, x), so (0, 16384) draws what tilemap draws for orient 1 at a matching camera.
+  // Each screen pixel of the band samples the layer at its centre; pixels that fall outside the layer are not touched.
+  // Dropped and counted (nothing drawn): tile_w or tile_h not a power of two, a layer wider or taller than 32767 px,
+  // |cos_q14| or |sin_q14| above 16384. A null set or tile size 0 draws nothing. To get the vector from any (x, y):
+  // r = rounded integer sqrt(x * x + y * y), cos_q14 = x * 16384 / r, sin_q14 = y * 16384 / r. Use a vector of length
+  // at least about 256 (scale a small one up first): a truncated sqrt or a short vector gives a non-unit result
+  // ((1, 1) gives 16384, 16384); with these the result is a unit vector within about 0.5 percent. No trig table needed.
+  void tilemapRotated(const TileLayer& l, int ax, int ay, int sx, int sy, int cos_q14, int sin_q14);
 
  private:
   void put(int x, int y, Color c) {  // the one clipped pixel write of every primitive
