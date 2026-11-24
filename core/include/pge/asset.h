@@ -26,6 +26,14 @@ Error assetSprites(const void* blob, uint32_t len, SpriteSheet& out);
 // Same payload with cols == 0 and w, h = tile size in 1..255; `frames` is the tile count (not used by Tileset).
 Error assetTileset(const void* blob, uint32_t len, Tileset& out);
 
+// Payload: u8 w (1..8), u8 h (>= 1), u8 first, u8 count, u8 spacing, u8 nranges; nranges x {u16 first, u16 count, u16 glyph}
+// (the FontRange table, used in place); then N glyphs of h bytes, N = (size - 6 - 6 * nranges) / h, which must divide
+// exactly. Codepoints first..first + count - 1 (the base block, count may be 0) are glyphs 0..count - 1, count <= N. Ranges
+// are sorted by first and do not overlap each other or the base block; each has count >= 1, first + count <= 0x10000 and
+// glyph + count <= N. The blob must be 2-byte aligned (the table is used in place), else InvalidArg; the table is read in
+// native byte order, so little-endian targets only, like the sprite palette. `out` is untouched on error.
+Error assetFont(const void* blob, uint32_t len, Font& out);
+
 // Payload: u16 w, u16 h, then w*h u8 tile ids (w, h >= 1, size exact).
 struct TilemapView { uint16_t w, h; const uint8_t* tiles; };
 Error assetTilemap(const void* blob, uint32_t len, TilemapView& out);

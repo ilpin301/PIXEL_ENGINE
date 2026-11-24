@@ -30,9 +30,13 @@ struct SpriteSheet { const uint8_t* px; const Color* palette; uint16_t w, h, fra
 struct Tileset { const uint8_t* px; const Color* palette; uint8_t tile_w, tile_h; bool transparent = false; };
 struct TileLayer { const uint8_t* tiles; uint16_t w, h; const Tileset* set; };
 
-// Glyph (ch - first) is h bytes at rows + (ch - first) * h, one byte per glyph row; bit (w - 1 - x) is pixel x (w <= 8).
-struct Font { const uint8_t* rows; uint8_t w, h, first, count, spacing; };
-extern const Font kFont5x7;  // ASCII 32..126
+// Text is UTF-8. Codepoint first + i (i < count) is glyph i; codepoints outside that block come from `ranges` (sorted by
+// first, non-overlapping): range codepoints first..first + count - 1 are glyphs glyph..glyph + count - 1. Glyph g is h
+// bytes at rows + g * h, one byte per glyph row; bit (w - 1 - x) is pixel x (w <= 8). A codepoint no table has and every
+// invalid UTF-8 byte draw '?' (nothing if the font has no '?') and advance one glyph.
+struct FontRange { uint16_t first, count, glyph; };
+struct Font { const uint8_t* rows; uint8_t w, h, first, count, spacing; const FontRange* ranges = nullptr; uint8_t nranges = 0; };
+extern const Font kFont5x7;  // ASCII 32..126, German umlauts and ß, Cyrillic
 
 constexpr int kMaxCoord = 16384;  // line / circle / text arguments beyond this are dropped and counted
 constexpr int kMaxScale = 3;
@@ -53,7 +57,7 @@ class Canvas {
   void rect(Rect r, Color c);                          // 1 px outline inside r
   void circle(int cx, int cy, int r, Color c);
   void fillCircle(int cx, int cy, int r, Color c);
-  void text(const Font& f, int x, int y, const char* s, Color c);  // transparent background, newline starts a line
+  void text(const Font& f, int x, int y, const char* s, Color c);  // UTF-8, transparent background, newline starts a line
   uint16_t dropped() const { return drops_; }  // invalid-argument draws in this canvas (saturating)
   void sprite(const SpriteSheet& s, uint16_t frame, int x, int y, SpriteFlags f);
   // Integer camera offsets: cam_x / cam_y are the top-left of the axis-aligned world rect the screen shows; see
@@ -87,7 +91,7 @@ class Canvas {
   uint16_t drops_ = 0;
 };
 
-// Widest line of s in pixels (no trailing spacing); 0 for null or empty.
+// Widest line of s in pixels (no trailing spacing), one glyph per UTF-8 codepoint; 0 for null or empty.
 int textWidth(const Font& f, const char* s);
 
 // scale > 1 needs `stage` of at least band_lines*scale * logical_w*scale pixels. The window origin of the 02 spec

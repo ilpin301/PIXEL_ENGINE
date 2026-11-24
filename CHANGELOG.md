@@ -2,6 +2,14 @@
 
 All notable changes to Pixel Game Engine are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Status words come from the STATUS.md feature tracker: "host only" = built and tested on the development PC, nothing run on a board; "board-checked" = the user confirmed it on the STM32F429I-DISCO; "compile-only" = it builds, nothing ran; "incomplete" and "out of scope" as in the tracker. This file states no performance numbers; measured numbers with their conditions are in `docs/benchmarks/`.
 
+## [Unreleased]
+
+### Added
+- UTF-8 text: `Canvas::text` and `textWidth` decode UTF-8; an invalid byte draws one `?`. ASCII output is unchanged.
+- `kFont5x7` covers German `Ä Ö Ü ä ö ü ß`, Cyrillic `А..я`, `Ё`, `ё` (73 glyphs) through the new `FontRange` table. Host only.
+- `pge::FontRange` and the `Font::ranges` / `nranges` fields.
+- `tools/pge_assets.py font` converts a PNG glyph grid into a font blob and C header; `assetFont()` loads the blob zero-copy with validation.
+
 ## [0.1.1] - 2026-11-17
 
 Documentation release; no engine behaviour change. `pge_version()` returns "0.1.1".

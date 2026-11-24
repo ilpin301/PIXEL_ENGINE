@@ -351,7 +351,7 @@ Referenz: [api-core.md](../user/api-core.md) (`Input`) und [api-hal.md](../user/
 
 ### Text und UI
 
-`Canvas::text` zeichnet einen String mit einer Bitmap-Schrift. `pge::kFont5x7` ist die eingebaute Schrift (ASCII 32 bis 126). `pge::textWidth` misst einen String. Die Widgets in `pge::ui` (`label`, `bar`, `iconGrid`, `listMenu`) haben keinen Zustand. Sie rufen sie aus `onRender` auf. `ui::MenuNav` bewegt eine Auswahl mit Up und Down. `pge::drawOverlay` zeigt Zeitmessungen und Pool-Zähler. Die UI-Widgets laufen nur auf dem Host.
+`Canvas::text` zeichnet einen String mit einer Bitmap-Schrift. `pge::kFont5x7` ist die eingebaute Schrift (ASCII 32 bis 126, deutsche Umlaute und ß, kyrillische Buchstaben). Strings sind UTF-8. `pge::textWidth` misst einen String. Die Widgets in `pge::ui` (`label`, `bar`, `iconGrid`, `listMenu`) haben keinen Zustand. Sie rufen sie aus `onRender` auf. `ui::MenuNav` bewegt eine Auswahl mit Up und Down. `pge::drawOverlay` zeigt Zeitmessungen und Pool-Zähler. Die UI-Widgets laufen nur auf dem Host.
 
 ```cpp
 const pge::ui::Style st{&pge::kFont5x7, 0xFFFF, 0x0000, 0xFFE0, 1};  // font, fg, bg, accent, padding
@@ -749,7 +749,7 @@ Am Ende von `onRender` wird der Punktestand gezeichnet:
 
 - `pge/ui.h` liefert die UI-Helfer, darunter `pge::ui::formatU32`.
 - `c.text(font, x, y, text, color)` zeichnet einen String mit transparentem Hintergrund.
-- `pge::kFont5x7` ist die eingebaute Schrift mit 5 x 7 Pixeln.
+- `pge::kFont5x7` ist die eingebaute Schrift mit 5 x 7 Pixeln. Sie enthält ASCII, deutsche Umlaute und ß sowie kyrillische Buchstaben. Strings sind UTF-8.
 - Der Text wird zweimal gezeichnet, erst schwarz und um 1 Pixel versetzt, dann weiß. So entsteht ein Schatten, der auf jedem Hintergrund lesbar ist.
 - `pge::ui::formatU32(buffer, size, value)` schreibt eine Zahl als Dezimaltext. Es braucht kein `printf`. Ein `uint32_t` hat höchstens 10 Ziffern. Mit der Endemarke reichen 11 Zeichen.
 - `pge::textWidth(font, text)` liefert die Breite eines Strings in Pixeln. Hier setzt es die Zahl hinter `"SCORE "`.

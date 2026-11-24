@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Asset converter for the pixel engine: PNG -> sprite/tileset blob, palette, Tiled/CSV -> tilemap blob.
+"""Asset converter for the pixel engine: PNG -> sprite/tileset/font blob, palette, Tiled/CSV -> tilemap blob.
 
 Blob = 12-byte header ("PGEA", type u8, version u8 = 1, u16 0, u32 payload size) + payload, little-endian.
 """
@@ -13,7 +13,7 @@ import tempfile
 
 from PIL import Image
 
-T_SPRITES, T_TILESET, T_TILEMAP = 0, 1, 6
+T_SPRITES, T_TILESET, T_FONT, T_TILEMAP = 0, 1, 2, 6
 FLIP_MASK = 0xF0000000  # Tiled flip/rotate flag bits (plus a spare nibble bit)
 
 
@@ -31,12 +31,16 @@ def rgb565(r, g, b):
 
 # ---------------------------------------------------------------- images
 
-def load_pixels(path):
-    """Row-major RGB565 values, None where alpha < 128. Returns (w, h, pixels)."""
+def open_rgba(path):
     try:
-        img = Image.open(path).convert("RGBA")
+        return Image.open(path).convert("RGBA")
     except OSError as e:
         raise ToolError(f"cannot read image {path}: {e}")
+
+
+def load_pixels(path):
+    """Row-major RGB565 values, None where alpha < 128. Returns (w, h, pixels)."""
+    img = open_rgba(path)
     raw = img.tobytes()
     px = [None if raw[i + 3] < 128 else rgb565(raw[i], raw[i + 1], raw[i + 2])
           for i in range(0, len(raw), 4)]
@@ -88,6 +92,66 @@ def sprites_blob(path, fw, fh, atlas=False, typ="sprites"):
 
 def palette_list(path):
     return index_pixels(load_pixels(path)[2])[0]
+
+
+# ---------------------------------------------------------------- fonts
+
+def load_ink(path):
+    """Row-major flags, True where a pixel is ink: opaque (alpha >= 128) and luminance < 128 (dark ink on a
+    transparent or white background). Luminance is 0.299 R + 0.587 G + 0.114 B in integers. Returns (w, h, flags)."""
+    img = open_rgba(path)
+    raw = img.tobytes()
+    ink = [raw[i + 3] >= 128 and 299 * raw[i] + 587 * raw[i + 1] + 114 * raw[i + 2] < 128000
+           for i in range(0, len(raw), 4)]
+    return img.width, img.height, ink
+
+
+def font_blob(path, fw, fh, chars, spacing=1):
+    chars = chars.replace("\r", "").replace("\n", "")  # a newline is a line break for Canvas::text, never a glyph
+    if not (1 <= fw <= 8 and 1 <= fh <= 255):
+        raise ToolError("font cell must be 1..8 wide and 1..255 high")
+    if not 0 <= spacing <= 255:
+        raise ToolError("spacing must be 0..255")
+    cps = [ord(c) for c in chars]
+    if not cps:
+        raise ToolError("no characters")
+    if len(set(cps)) != len(cps):
+        raise ToolError("duplicate characters")
+    if max(cps) > 0xFFFF:
+        raise ToolError("codepoint above U+FFFF")
+    W, H, ink = load_ink(path)
+    if W % fw or H % fh:
+        raise ToolError(f"image {W}x{H} is not a multiple of cell {fw}x{fh}")
+    cols, cells = W // fw, (W // fw) * (H // fh)
+    if cells < len(cps):
+        raise ToolError(f"image has {cells} cells for {len(cps)} characters")
+
+    def cell(i):  # one byte per row, bit (fw - 1 - x) = pixel x
+        x0, y0 = i % cols * fw, i // cols * fh
+        return bytes(sum(ink[(y0 + y) * W + x0 + x] << (fw - 1 - x) for x in range(fw)) for y in range(fh))
+
+    if any(any(cell(i)) for i in range(len(cps), cells)):
+        raise ToolError("cells beyond the character list must be empty")
+    order = sorted(range(len(cps)), key=lambda i: cps[i])
+    cps, glyphs = [cps[i] for i in order], [cell(i) for i in order]  # glyph index = rank of the codepoint
+    # Base block: the run of consecutive codepoints from the smallest one, if that is < 256, capped at codepoint 255 and
+    # 255 glyphs. Otherwise no base block (first = 0, count = 0). Every other run becomes one range.
+    base = 0
+    if cps[0] < 256:
+        while base < min(len(cps), 255) and cps[base] == cps[0] + base and cps[base] < 256:
+            base += 1
+    ranges, i = [], base
+    while i < len(cps):
+        j = i + 1
+        while j < len(cps) and cps[j] == cps[j - 1] + 1:
+            j += 1
+        ranges.append((cps[i], j - i, i))
+        i = j
+    if len(ranges) > 255:
+        raise ToolError("more than 255 ranges")
+    payload = (struct.pack("<6B", fw, fh, cps[0] if base else 0, base, spacing, len(ranges))
+               + b"".join(struct.pack("<3H", *r) for r in ranges) + b"".join(glyphs))
+    return blob(T_FONT, payload)
 
 
 # ---------------------------------------------------------------- tilemaps
@@ -217,7 +281,20 @@ def _golden_png(path):
 
 GOLDEN_SPRITES = bytes.fromhex(
     "50474541 0001 0000 1A000000  02000200 02000000 03000100  0000 00F8 E007  00010100 02020001")
+GOLDEN_FONT = bytes.fromhex(
+    "50474541 0201 0000 12000000  03 02 41 02 01 01  1604 0100 0200  0507 0205 0701")
 GOLDEN_TILEMAP = bytes.fromhex("50474541 0601 0000 0A000000  0300 0200  00 01 02 03 00 FE")
+
+
+def _golden_font_png(path, order=(0, 1, 2), tail=""):
+    """Three 3x2 cells (ink bits 5 7 | 2 5 | 7 1) in the given order, plus an optional extra cell. K, D (luminance 127), S
+    (alpha 128) are ink; '.', W, L (luminance 128), T (alpha 127) are not."""
+    px = {"K": (0, 0, 0, 255), "D": (127, 127, 127, 255), "S": (0, 0, 0, 128), ".": (0, 0, 0, 0),
+          "W": (255, 255, 255, 255), "L": (128, 128, 128, 255), "T": (0, 0, 0, 127)}
+    cells = [("KLDKKK", ".KWDTK", "KDSWTS")[i] for i in order] + ([tail] if tail else [])
+    img = Image.new("RGBA", (3 * len(cells), 2))
+    img.putdata([px[c[y * 3 + x]] for y in range(2) for c in cells for x in range(3)])
+    img.save(path)
 
 
 def selftest(emit_dir):
@@ -240,6 +317,27 @@ def selftest(emit_dir):
         check(b == GOLDEN_SPRITES, f"golden sprites mismatch: {b.hex(' ')}")
         check(sprites_blob(png, 2, 2) == b, "conversion is not deterministic")
         check(palette_list(png) == [0x0000, 0xF800, 0x07E0], "golden palette mismatch")
+
+        fpng = p("f.png")
+        _golden_font_png(fpng)
+        fb = font_blob(fpng, 3, 2, "AB\u0416")
+        check(fb == GOLDEN_FONT, f"golden font mismatch: {fb.hex(' ')}")
+        check(font_blob(fpng, 3, 2, "AB\u0416") == fb, "font conversion is not deterministic")
+        _golden_font_png(p("f_rev.png"), order=(2, 0, 1))
+        check(font_blob(p("f_rev.png"), 3, 2, "\u0416AB") == fb, "glyphs are not sorted by codepoint")
+        _golden_font_png(p("f_tail.png"), tail="......")
+        check(font_blob(p("f_tail.png"), 3, 2, "AB\u0416\n") == fb, "empty trailing cell / newline changed the blob")
+        Image.new("RGBA", (287, 1), (0, 0, 0, 255)).save(p("f287.png"))
+        b287 = font_blob(p("f287.png"), 1, 1, "".join(map(chr, range(14, 301))))
+        check(b287[12:18] == bytes([1, 1, 14, 242, 1, 1]) and b287[18:24] == struct.pack("<3H", 256, 45, 242),
+              "base block must stop at codepoint 255")
+        check(font_blob(fpng, 3, 2, "\u0416\u0417\u0418")[14:18] == bytes([0, 0, 1, 1]), "no base block expected")
+
+        def sparse(n):  # n one-pixel glyphs at pairwise non-consecutive codepoints: n ranges
+            Image.new("RGBA", (n, 1), (0, 0, 0, 255)).save(p("sp.png"))
+            return font_blob(p("sp.png"), 1, 1, "".join(chr(0x100 + 2 * i) for i in range(n)))
+
+        check(sparse(255)[17] == 255, "255 ranges must be accepted")
 
         csv, js = p("m.csv"), p("m.json")
         with open(csv, "w") as f:
@@ -270,6 +368,17 @@ def selftest(emit_dir):
         big.save(p("big.png"))
         rejects("257 colours", lambda: sprites_blob(p("big.png"), 1, 1))
         rejects("size not multiple", lambda: sprites_blob(png, 3, 2))
+        rejects("font duplicate char", lambda: font_blob(fpng, 3, 2, "AA\u0416"))
+        rejects("font width 9", lambda: font_blob(fpng, 9, 2, "A"))
+        rejects("font height 0", lambda: font_blob(fpng, 3, 0, "A"))
+        rejects("font spacing 256", lambda: font_blob(fpng, 3, 2, "A", 256))
+        rejects("font too few cells", lambda: font_blob(fpng, 3, 2, "AB\u0416!"))
+        rejects("font cell mismatch", lambda: font_blob(fpng, 4, 2, "A"))
+        rejects("font codepoint > FFFF", lambda: font_blob(fpng, 3, 2, "A\U0001F600"))
+        rejects("font no chars", lambda: font_blob(fpng, 3, 2, "\n"))
+        _golden_font_png(p("f_ink.png"), tail="K.....")
+        rejects("font non-empty extra cell", lambda: font_blob(p("f_ink.png"), 3, 2, "AB\u0416"))
+        rejects("font 256 ranges", lambda: sparse(256))
         rejects("csv 255", lambda: tilemap_blob(write("a.csv", "0,255\n")))
         rejects("csv ragged", lambda: tilemap_blob(write("b.csv", "0,1\n2\n")))
         rejects("base64", lambda: tilemap_blob(jmap(encoding="base64")))
@@ -281,6 +390,7 @@ def selftest(emit_dir):
         if emit_dir:
             os.makedirs(emit_dir, exist_ok=True)
             write_c(os.path.join(emit_dir, "sample_sprites.h"), b, "kSampleSprites")
+            write_c(os.path.join(emit_dir, "sample_font.h"), fb, "kSampleFont")
             write_c(os.path.join(emit_dir, "sample_tilemap.h"), tilemap_blob(csv), "kSampleTilemap")
     print("selftest OK")
 
@@ -308,6 +418,14 @@ def main(argv=None):
     sp.add_argument("--frame", required=True, help="WxH")
     sp.add_argument("--atlas", action="store_true")
     sp.add_argument("--type", choices=["sprites", "tileset"], default="sprites")
+    sp = sub.add_parser("font", description="Font blob from a PNG grid of WxH cells read row-major; cell i is the glyph of "
+                        "character i. A pixel is ink when opaque (alpha >= 128) and luminance < 128.")
+    common(sp, "font")
+    sp.add_argument("--frame", required=True, help="WxH cell size, W 1..8, H 1..255")
+    g = sp.add_mutually_exclusive_group(required=True)
+    g.add_argument("--chars", help="characters of the cells in cell order (UTF-8)")
+    g.add_argument("--chars-file", help="UTF-8 file holding the characters (newlines ignored)")
+    sp.add_argument("--spacing", type=int, default=1, help="pixels between glyphs (default 1)")
     sp = sub.add_parser("palette")
     common(sp, "palette")
     sp = sub.add_parser("tilemap")
@@ -320,11 +438,21 @@ def main(argv=None):
     try:
         if args.cmd == "selftest":
             selftest(args.emit_dir)
-        elif args.cmd == "sprites":
+        elif args.cmd in ("sprites", "font"):
             m = re.fullmatch(r"(\d+)x(\d+)", args.frame)
             if not m:
                 raise ToolError("--frame must look like 16x16")
-            emit(sprites_blob(args.input, int(m[1]), int(m[2]), args.atlas, args.type), args)
+            if args.cmd == "sprites":
+                emit(sprites_blob(args.input, int(m[1]), int(m[2]), args.atlas, args.type), args)
+            else:
+                chars = args.chars
+                if chars is None:
+                    try:
+                        with open(args.chars_file, "r", encoding="utf-8-sig") as f:  # -sig: a BOM is not a character
+                            chars = f.read()
+                    except (OSError, ValueError) as e:
+                        raise ToolError(f"cannot read {args.chars_file}: {e}")
+                emit(font_blob(args.input, int(m[1]), int(m[2]), chars, args.spacing), args)
         elif args.cmd == "tilemap":
             emit(tilemap_blob(args.input, args.layer), args)
         else:

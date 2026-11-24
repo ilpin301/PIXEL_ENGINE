@@ -209,6 +209,7 @@ Convert sprite sheets, palettes and tilemaps into PGEA blobs and C headers:
 python tools/pge_assets.py sprites sheet.png --frame 16x16 [--atlas] [--type tileset] --out-bin sheet.pgea --out-c sheet.h --name kSheet
 python tools/pge_assets.py palette sheet.png --out-c pal.h --name kPal
 python tools/pge_assets.py tilemap level.csv|level.json [--layer NAME] --out-bin level.pgea --out-c level.h --name kLevel
+python tools/pge_assets.py font glyphs.png --frame 8x8 (--chars 'ABC abc 0123' | --chars-file F) [--spacing 1] --out-bin font.pgea --out-c font.h --name kFont
 python tools/pge_assets.py selftest [--emit-dir DIR]
 ```
 

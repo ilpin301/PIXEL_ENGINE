@@ -107,6 +107,7 @@ class Canvas {                              // valid only inside onRender
   void sprite(const SpriteSheet& s, uint16_t frame, int x, int y, SpriteFlags f);
   void tilemap(const TileLayer& l, const Camera& cam, uint8_t layer_slot);
   void text(const Font& f, int x, int y, const char* s, Color c);
+  // s is UTF-8; Font may carry a FontRange table for codepoints outside its base block (docs/user/api-gfx.md)
 };
 struct Camera { Fix x, y; uint16_t view_w, view_h; Rect bounds;
   void follow(Fix tx, Fix ty);              // centre on target, then clamp to bounds

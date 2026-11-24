@@ -78,6 +78,38 @@ Error assetTileset(const void* blob, uint32_t len, Tileset& out) {
   return Ok;
 }
 
+Error assetFont(const void* blob, uint32_t len, Font& out) {
+  static_assert(sizeof(FontRange) == 6 && alignof(FontRange) == 2, "the blob's range table is used as FontRange[]");
+  AssetView v;
+  Error e = assetCheck(blob, len, AssetType::Font, v);
+  if (e != Ok) return e;
+  PGE_CHECK((reinterpret_cast<uintptr_t>(blob) & 1) == 0, InvalidArg);
+  PGE_CHECK(v.size >= 6, Corrupt);
+  const uint8_t* p = v.payload;
+  const uint8_t w = p[0], h = p[1], first = p[2], count = p[3], nr = p[5];
+  const uint32_t table = 6u * nr;
+  PGE_CHECK(w >= 1 && w <= 8 && h >= 1 && v.size - 6 >= table && (v.size - 6 - table) % h == 0, Corrupt);
+  const uint32_t glyphs = (v.size - 6 - table) / h;
+  PGE_CHECK(count <= glyphs, Corrupt);
+  const FontRange* r = reinterpret_cast<const FontRange*>(p + 6);
+  uint32_t prev_end = 0;  // end of the previous range: the next one must start at or after it
+  for (uint32_t i = 0; i < nr; i++) {
+    const uint32_t rf = r[i].first, rc = r[i].count, end = rf + rc;
+    PGE_CHECK(rc >= 1 && rf >= prev_end && end <= 0x10000 && r[i].glyph + rc <= glyphs, Corrupt);
+    PGE_CHECK(count == 0 || end <= first || rf >= static_cast<uint32_t>(first) + count, Corrupt);  // not in the base block
+    prev_end = end;
+  }
+  out.rows = p + 6 + table;
+  out.w = w;
+  out.h = h;
+  out.first = first;
+  out.count = count;
+  out.spacing = p[4];
+  out.ranges = nr ? r : nullptr;
+  out.nranges = nr;
+  return Ok;
+}
+
 Error assetTilemap(const void* blob, uint32_t len, TilemapView& out) {
   AssetView v;
   Error e = assetCheck(blob, len, AssetType::Tilemap, v);

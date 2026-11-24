@@ -24,7 +24,8 @@ Core drawing types and the `Canvas` that every render callback draws into, plus 
 | `SpriteSheet` | `struct SpriteSheet { const uint8_t* px; const Color* palette; uint16_t w, h, frames; bool transparent; uint16_t cols = 0; };` | 8-bit indexed; index 0 is transparent when `transparent` is true. `cols == 0`: frames are stored one after another, frame f at `px + f*w*h`. `cols > 0`: an atlas with `cols` frames per row (row stride `cols*w`), frame f at column `f % cols`, row `f / cols`. |
 | `Tileset` | `struct Tileset { const uint8_t* px; const Color* palette; uint8_t tile_w, tile_h; bool transparent = false; };` | Tile t at `px + t*tile_w*tile_h`; indexed. With `transparent` pixel index 0 is skipped (layers drawn over others), otherwise every pixel is written. Tile ids are not range-checked (no tile count yet). |
 | `TileLayer` | `struct TileLayer { const uint8_t* tiles; uint16_t w, h; const Tileset* set; };` | |
-| `Font` | `struct Font { const uint8_t* rows; uint8_t w, h, first, count, spacing; };` | Glyph `(ch - first)` is h bytes at `rows + (ch - first) * h`, one byte per glyph row; bit `(w - 1 - x)` is pixel x (w <= 8). |
+| `Font` | `struct Font { const uint8_t* rows; uint8_t w, h, first, count, spacing; const FontRange* ranges = nullptr; uint8_t nranges = 0; };` | Base block: codepoint `first .. first+count-1` is glyph `ch - first`. Other codepoints are looked up in `ranges` (sorted, non-overlapping, linear scan) and use glyph `range.glyph + (ch - range.first)`. A glyph is h bytes at `rows + glyph*h`, one byte per glyph row; bit `(w - 1 - x)` is pixel x (w <= 8). A codepoint in neither draws `?`. |
+| `FontRange` | `struct FontRange { uint16_t first, count, glyph; };` | Codepoints `first .. first+count-1` use glyphs `glyph .. glyph+count-1` (absolute glyph index). Used by `Font::ranges`; the same layout is the table entry in an asset font blob. |
 | `RenderConfig` | `struct RenderConfig { uint16_t logical_w, logical_h; uint16_t band_lines; Color clear_color; uint8_t scale = 1; Color* stage = nullptr; uint32_t stage_pixels = 0; };` | `scale > 1` needs `stage` of at least `band_lines*scale * logical_w*scale` pixels. The window origin of the 02 spec is not implemented (deferred to the windowed flush, S5.6): the logical screen always fills the display. |
 | `RenderFn` | `typedef void (*RenderFn)(Canvas&, void* ctx);` | Per-frame draw callback. |
 
@@ -32,7 +33,7 @@ Core drawing types and the `Canvas` that every render callback draws into, plus 
 
 | Name | Signature | Meaning |
 |---|---|---|
-| `kFont5x7` | `extern const Font kFont5x7;` | ASCII 32..126 |
+| `kFont5x7` | `extern const Font kFont5x7;` | ASCII 32..126, plus German `Ä Ö Ü ä ö ü ß`, Cyrillic `А..я`, `Ё`, `ё` (73 glyphs in the range table). Accented capitals have their marks in row 0, so they are a pixel shorter. |
 | `kMaxCoord` | `constexpr int kMaxCoord = 16384;` | line / circle / text arguments beyond this are dropped and counted |
 | `kMaxScale` | `constexpr int kMaxScale = 3;` | |
 
@@ -54,7 +55,7 @@ Valid only inside a `RenderFn`; made by `renderFrame`. All coordinates are logic
 | `rect` | `void rect(Rect r, Color c);` | 1 px outline inside r |
 | `circle` | `void circle(int cx, int cy, int r, Color c);` | |
 | `fillCircle` | `void fillCircle(int cx, int cy, int r, Color c);` | |
-| `text` | `void text(const Font& f, int x, int y, const char* s, Color c);` | transparent background, newline starts a line |
+| `text` | `void text(const Font& f, int x, int y, const char* s, Color c);` | `s` is UTF-8; transparent background, newline starts a line. An invalid byte draws one `?` and consumes one byte; a codepoint not in the font draws `?`. |
 | `dropped` | `uint16_t dropped() const` | invalid-argument draws in this canvas (saturating) |
 | `sprite` | `void sprite(const SpriteSheet& s, uint16_t frame, int x, int y, SpriteFlags f);` | |
 | `tilemap` | `void tilemap(const TileLayer& l, int cam_x, int cam_y, uint8_t orient = 0);` | `cam_x`, `cam_y` are the world pixel at the top-left of the world rectangle the screen shows (the same meaning as `Camera` x, y, for every `orient`). `orient` is the number of clockwise quarter turns of the picture, 0..3 (same numbering as the rotation field of `SpriteFlags`). See `camera.h` for Camera and parallax layers. |
@@ -66,7 +67,7 @@ Drop counting: invalid-argument draws are counted only on the band that starts a
 
 | Signature | Meaning |
 |---|---|
-| `int textWidth(const Font& f, const char* s);` | Widest line of s in pixels (no trailing spacing); 0 for null or empty. |
+| `int textWidth(const Font& f, const char* s);` | Widest line of s in pixels (no trailing spacing); counts glyphs (decoded UTF-8 codepoints, an invalid byte counts as one), not bytes; 0 for null or empty. |
 | `int renderFrame(const RenderConfig& cfg, Color* band_buf, uint32_t band_buf_pixels, uint32_t seed, RenderFn fn, void* ctx);` | Draws one frame band by band through the display HAL (K2). Returns Ok, InvalidArg, or a nonzero flush/wait result. `band_lines > logical_h` is clamped; the last band may be shorter. Flush rects are in display coordinates (logical * scale). |
 | `turnRect` | `Rect turnRect(Rect r, int view_w, int view_h, int quarter_turns);` | Turns `r`, given relative to the top-left of a view of `view_w` x `view_h`, by `quarter_turns` clockwise quarter turns (0..3). The result is relative to the top-left of the turned picture; w and h swap for odd `quarter_turns`. |
 

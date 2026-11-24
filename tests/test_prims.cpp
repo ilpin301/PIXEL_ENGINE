@@ -502,6 +502,105 @@ static int testTextWidth() {
   return 0;
 }
 
+// ---- 8. UTF-8 text: EN / RU / DE golden, glyphs counted per codepoint, bad input draws '?' ----
+enum { UW = 39, UH = 27 };  // widest line "Привет" (35 px) + 4
+static const char* const kUtf8Text = "Hi!\nПривет\nGröße";
+static const char* const kUtf8Art =
+    ".......................................\n"
+    ".......................................\n"
+    "..#...#...#.....#......................\n"
+    "..#...#.........#......................\n"
+    "..#####..##.....#......................\n"
+    "..#...#...#.....#......................\n"
+    "..#...#...#............................\n"
+    "..#...#..###....#......................\n"
+    ".......................................\n"
+    ".......................................\n"
+    "..#####................................\n"
+    "..#...#.#.##..#...#.####...###..#####..\n"
+    "..#...#.##..#.#..##.#...#.#...#...#....\n"
+    "..#...#.#...#.#.#.#.####..#####...#....\n"
+    "..#...#.##..#.##..#.#...#.#.......#....\n"
+    "..#...#.#.##..#...#.####...###....#....\n"
+    "........#..............................\n"
+    ".......................................\n"
+    "...###.........#.#...##................\n"
+    "..#...#.#.##........#..#...###.........\n"
+    "..#.....##..#..###..#..#..#...#........\n"
+    "..#..##.#.....#...#.#.##..#####........\n"
+    "..#...#.#.....#...#.#..#..#............\n"
+    "...####.#......###..#.##...###.........\n"
+    ".......................................\n"
+    ".......................................\n"
+    ".......................................\n";
+
+// Draws s at (2, 2) on a UW x UH canvas and writes its '#'/'.' art to out; returns the lit pixel count.
+static int artOf(const char* s, char* out) {
+  static Color buf[UW * UH];
+  std::memset(buf, 0, sizeof buf);
+  Canvas c(buf, UW, UH, 0, UH, 0);
+  c.text(kFont5x7, 2, 2, s, 1);
+  int lit = 0;
+  for (int y = 0; y < UH; y++) {
+    for (int x = 0; x < UW; x++) {
+      lit += buf[y * UW + x] != 0;
+      *out++ = buf[y * UW + x] ? '#' : '.';
+    }
+    *out++ = '\n';
+  }
+  *out = 0;
+  return lit;
+}
+
+static int testUtf8() {
+  char art[UW * UH + UH + 1], want[UW * UH + UH + 1];
+  CHECK(textWidth(kFont5x7, kUtf8Text) + 4 == UW);
+  CHECK(artOf(kUtf8Text, art) > 100);
+  if (std::strcmp(art, kUtf8Art) != 0) std::printf("utf8 golden differs, got:\n%s", art);
+  CHECK(std::strcmp(art, kUtf8Art) == 0);
+  // one glyph per codepoint, not per byte
+  CHECK(textWidth(kFont5x7, "Ä") == 5 && textWidth(kFont5x7, "Привет") == 6 * 6 - 1 && textWidth(kFont5x7, "aÄb") == 17);
+  CHECK(textWidth(kFont5x7, "Ä\nÖÖ") == 11);
+  // whatever the font cannot show, and every bad byte, is drawn as '?'; an invalid byte eats exactly one byte
+  struct Pair { const char* got; const char* want; };
+  static const Pair pairs[] = {
+      {"\xFF", "?"},                  // invalid byte
+      {"a\x80" "b", "a?b"},           // stray continuation byte
+      {"A\xD0", "A?"},                // truncated sequence at the NUL
+      {"\xC0\x80", "??"},            // overlong NUL
+      {"\xE2\x82", "??"},            // truncated 3-byte sequence
+      {"\xED\xA0\x80", "???"},      // UTF-16 surrogate
+      {"€", "?"},                      // valid, not in the font
+      {"\xF0\x9F\x98\x80", "?"},   // valid 4-byte sequence, one glyph
+  };
+  for (const Pair& p : pairs) {
+    CHECK(artOf(p.got, art) > 0 && artOf(p.want, want) > 0);
+    CHECK(std::strcmp(art, want) == 0 && textWidth(kFont5x7, p.got) == textWidth(kFont5x7, p.want));
+  }
+  // the bytes after a NUL are never looked at
+  static const char cut1[] = {'A', (char)0xD0, 0, (char)0x80, (char)0x80}, cut2[] = {(char)0xE2, (char)0x82, 0, (char)0xAC};
+  CHECK(textWidth(kFont5x7, cut1) == 11 && textWidth(kFont5x7, cut2) == 11);
+  // pin every extra glyph: Ä Ö Ü ß ä ö ü Ё А..я ё are glyphs 95..167 in order, drawn exactly as their table rows
+  CHECK(kFont5x7.w == 5 && kFont5x7.h == 7);
+  uint16_t cps[73] = {0xC4, 0xD6, 0xDC, 0xDF, 0xE4, 0xF6, 0xFC, 0x401};
+  for (int i = 0; i < 64; i++) cps[8 + i] = (uint16_t)(0x410 + i);
+  cps[72] = 0x451;
+  static Color gbuf[5 * 7];
+  for (int n = 0; n < 73; n++) {
+    char s[3] = {(char)(0xC0 | (cps[n] >> 6)), (char)(0x80 | (cps[n] & 0x3F)), 0};  // all 73 are 2-byte sequences
+    std::memset(gbuf, 0, sizeof gbuf);
+    Canvas c(gbuf, 5, 7, 0, 7, 0);
+    c.text(kFont5x7, 0, 0, s, 1);
+    const uint8_t* rows = kFont5x7.rows + (95 + n) * 7;
+    for (int y = 0; y < 7; y++)
+      for (int x = 0; x < 5; x++) CHECK((gbuf[y * 5 + x] != 0) == (((rows[y] >> (4 - x)) & 1) != 0));
+  }
+  // a lowercase mark letter must not be the capital
+  CHECK(artOf("Ö", art) > 0 && artOf("ö", want) > 0 && std::strcmp(art, want) != 0);
+  CHECK(artOf("Й", art) > 0 && artOf("й", want) > 0 && std::strcmp(art, want) != 0);
+  return 0;
+}
+
 int main() {
   int rc;
   if ((rc = testGoldens())) return rc;
@@ -512,6 +611,7 @@ int main() {
   if ((rc = testDrops())) return rc;
   if ((rc = testColor())) return rc;
   if ((rc = testTextWidth())) return rc;
+  if ((rc = testUtf8())) return rc;
   std::printf("prims: all checks passed\n");
   return 0;
 }

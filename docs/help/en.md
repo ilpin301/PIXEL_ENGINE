@@ -351,7 +351,7 @@ Reference: [api-core.md](../user/api-core.md) (`Input`) and [api-hal.md](../user
 
 ### Text and UI
 
-`Canvas::text` draws a string with a bitmap font. `pge::kFont5x7` is the built-in font (ASCII 32 to 126). `pge::textWidth` measures a string. The widgets in `pge::ui` (`label`, `bar`, `iconGrid`, `listMenu`) have no state; you call them from `onRender`. `ui::MenuNav` moves a selection with Up and Down. `pge::drawOverlay` shows timing and pool counters. The UI widgets are host only.
+`Canvas::text` draws a string with a bitmap font. `pge::kFont5x7` is the built-in font (ASCII 32 to 126, German umlauts and ß, Cyrillic; strings are UTF-8). `pge::textWidth` measures a string. The widgets in `pge::ui` (`label`, `bar`, `iconGrid`, `listMenu`) have no state; you call them from `onRender`. `ui::MenuNav` moves a selection with Up and Down. `pge::drawOverlay` shows timing and pool counters. The UI widgets are host only.
 
 ```cpp
 const pge::ui::Style st{&pge::kFont5x7, 0xFFFF, 0x0000, 0xFFE0, 1};  // font, fg, bg, accent, padding
@@ -749,7 +749,7 @@ At the end of `onRender`, the score is drawn:
 
 - `pge/ui.h` provides the UI helpers, including `pge::ui::formatU32`.
 - `c.text(font, x, y, text, color)` draws a string with a transparent background.
-- `pge::kFont5x7` is the built-in 5 x 7 pixel font.
+- `pge::kFont5x7` is the built-in 5 x 7 pixel font. It has ASCII, German umlauts and ß, and Cyrillic; strings are UTF-8.
 - Drawing the text twice, first in black and 1 pixel offset, then in white, gives a shadow that is readable on any background.
 - `pge::ui::formatU32(buffer, size, value)` writes a number as decimal text. It needs no `printf`. A `uint32_t` has at most 10 digits, so 11 characters are enough, including the end mark.
 - `pge::textWidth(font, text)` gives the width of a string in pixels. Here it places the number after `"SCORE "`.

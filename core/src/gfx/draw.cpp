@@ -66,16 +66,41 @@ void Canvas::fillCircle(int cx, int cy, int r, Color c) {
   }
 }
 
+// Next codepoint of s (*s != 0); advances s. Any stray, overlong, surrogate, out-of-range or truncated sequence gives '?'
+// and eats exactly one byte, so s never moves past the NUL.
+static uint32_t nextCp(const char*& s) {
+  const uint8_t* p = (const uint8_t*)s++;
+  uint32_t b = *p;
+  if (b < 0x80) return b;
+  if (b < 0xC2 || b > 0xF4) return '?';  // stray continuation byte, or a lead that only starts overlong / too large sequences
+  int n = b >= 0xF0 ? 3 : b >= 0xE0 ? 2 : 1;  // continuation bytes still owed
+  uint32_t cp = b & (0x3F >> n);
+  for (int i = 1; i <= n; i++) {
+    if ((p[i] & 0xC0) != 0x80) return '?';  // also true for the NUL
+    cp = cp << 6 | (p[i] & 0x3F);
+  }
+  if ((n == 2 && cp < 0x800) || (n == 3 && cp < 0x10000) || cp > 0x10FFFF || (cp >= 0xD800 && cp < 0xE000)) return '?';
+  s += n;
+  return cp;
+}
+
+// Glyph index of codepoint cp in f, or -1.
+static int glyphOf(const Font& f, uint32_t cp) {
+  if (cp >= f.first && cp < (uint32_t)f.first + f.count) return (int)(cp - f.first);
+  for (int i = 0; i < f.nranges && cp >= f.ranges[i].first; i++)  // sorted: nothing further can match
+    if (cp < (uint32_t)f.ranges[i].first + f.ranges[i].count) return f.ranges[i].glyph + (int)(cp - f.ranges[i].first);
+  return -1;
+}
+
 void Canvas::text(const Font& f, int x, int y, const char* s, Color c) {
   if (!s || !f.rows || tooBig(x) || tooBig(y)) { drop(); return; }
-  const int x0 = x;
-  const bool has_q = '?' >= f.first && '?' < f.first + f.count;
-  for (; *s; s++) {
-    if (*s == '\n') { x = x0; y += f.h + f.spacing; continue; }
-    int ch = (unsigned char)*s;
-    if (ch < f.first || ch >= f.first + f.count) ch = '?';
-    if ((ch != '?' || has_q) && visible(Rect{x, y, f.w, f.h})) {
-      const uint8_t* g = f.rows + (ch - f.first) * f.h;
+  const int x0 = x, q = glyphOf(f, '?');  // q < 0: unknown glyphs draw nothing but still advance
+  while (*s) {
+    if (*s == '\n') { s++; x = x0; y += f.h + f.spacing; continue; }
+    int gi = glyphOf(f, nextCp(s));
+    if (gi < 0) gi = q;
+    if (gi >= 0 && visible(Rect{x, y, f.w, f.h})) {
+      const uint8_t* g = f.rows + gi * f.h;
       for (int gy = 0; gy < f.h; gy++)
         for (int gx = 0; gx < f.w; gx++)
           if (g[gy] & (1 << (f.w - 1 - gx))) put(x + gx, y + gy, c);
@@ -86,14 +111,17 @@ void Canvas::text(const Font& f, int x, int y, const char* s, Color c) {
 
 int textWidth(const Font& f, const char* s) {
   if (!s) return 0;
-  int best = 0, n = 0;
-  for (;; s++) {
-    if (*s == '\n' || *s == 0) {
+  int best = 0, n = 0;  // n = glyphs on the current line
+  for (;;) {
+    const bool end = *s == 0;
+    if (*s == '\n' || end) {
       int w = n ? n * (f.w + f.spacing) - f.spacing : 0;
       if (w > best) best = w;
       n = 0;
-      if (!*s) break;
+      if (end) break;
+      s++;
     } else {
+      nextCp(s);
       n++;
     }
   }

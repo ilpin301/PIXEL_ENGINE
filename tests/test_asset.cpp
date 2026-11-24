@@ -3,10 +3,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 #include "pge/asset.h"
 #include "pge/color.h"
+#include "pge/gfx.h"
 
 #ifdef PGE_HAVE_GEN
+#include "sample_font.h"
 #include "sample_sprites.h"
 #include "sample_tilemap.h"
 #endif
@@ -30,6 +33,19 @@ alignas(4) static const uint8_t kTilemap[22] = {
     0x50, 0x47, 0x45, 0x41, 0x06, 0x01, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x00,
     0x03, 0x00, 0x02, 0x00, 0x00, 0x01, 0x02, 0x03, 0x00, 0xFE};
 
+// Font blob (same bytes as the Python tool's GOLDEN_FONT): 3x2 glyphs, base block 'A'..'B' = glyphs 0..1, one range
+// U+0416 (a Cyrillic letter) = glyph 2. Payload offsets from the blob start: w 12, h 13, first 14, count 15, spacing 16,
+// nranges 17, range 18..23 (first, count, glyph as u16), glyph rows 24..29.
+alignas(4) static const uint8_t kFont[30] = {
+    0x50, 0x47, 0x45, 0x41, 0x02, 0x01, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00,
+    0x03, 0x02, 0x41, 0x02, 0x01, 0x01, 0x16, 0x04, 0x01, 0x00, 0x02, 0x00,
+    0x05, 0x07, 0x02, 0x05, 0x07, 0x01};
+// Two ranges, 5 glyphs: U+0416 = glyph 2, U+0430..U+0431 = glyphs 3..4.
+alignas(4) static const uint8_t kFont2[40] = {
+    0x50, 0x47, 0x45, 0x41, 0x02, 0x01, 0x00, 0x00, 0x1C, 0x00, 0x00, 0x00,
+    0x03, 0x02, 0x41, 0x02, 0x01, 0x02, 0x16, 0x04, 0x01, 0x00, 0x02, 0x00, 0x30, 0x04, 0x02, 0x00, 0x03, 0x00,
+    0x05, 0x07, 0x02, 0x05, 0x07, 0x01, 0x04, 0x03, 0x06, 0x02};
+
 // Mutable aligned copy of a blob with spare room.
 struct Blob {
   alignas(4) uint8_t d[64];
@@ -46,13 +62,15 @@ struct Blob {
   }
 };
 
-// kind 0: sprites, 1: tileset, 2: tilemap.
+// kind 0: sprites, 1: tileset, 2: tilemap, 3: font.
 static Error parse(int kind, const void* p, uint32_t n) {
   SpriteSheet s;
   Tileset t;
   TilemapView m;
+  Font f;
   if (kind == 0) return assetSprites(p, n, s);
   if (kind == 1) return assetTileset(p, n, t);
+  if (kind == 3) return assetFont(p, n, f);
   return assetTilemap(p, n, m);
 }
 
@@ -83,9 +101,9 @@ static int testGolden() {
 
 // Header-level rejections that apply to every kind.
 static int testHeaderRejects() {
-  const uint8_t* src[3] = {kSprites, kSprites, kTilemap};
-  const uint32_t len[3] = {38, 38, 22};
-  for (int k = 0; k < 3; k++) {
+  const uint8_t* src[4] = {kSprites, kSprites, kTilemap, kFont};
+  const uint32_t len[4] = {38, 38, 22, 30};
+  for (int k = 0; k < 4; k++) {
     Blob b(src[k], len[k]);
     if (k == 1) b.d[4] = 1;
     CHECK(parse(k, b.d, b.n) == Ok);
@@ -205,6 +223,142 @@ static int testAtlas() {
   return 0;
 }
 
+// Draws s at (0, 0) on a 12x2 canvas and writes the 24 '#'/'.' pixels (row 0, then row 1) to out.
+static void artOf(const Font& f, const char* s, char* out) {
+  Color buf[12 * 2] = {};
+  Canvas c(buf, 12, 2, 0, 2, 0);
+  c.text(f, 0, 0, s, 1);
+  for (int i = 0; i < 24; i++) out[i] = buf[i] ? '#' : '.';
+  out[24] = 0;
+}
+
+static Error parseFont(const Blob& b) { return parse(3, b.d, b.n); }
+
+static int testFont() {
+  Font f;
+  CHECK(assetFont(kFont, sizeof(kFont), f) == Ok);
+  CHECK(f.w == 3 && f.h == 2 && f.first == 'A' && f.count == 2 && f.spacing == 1 && f.nranges == 1);
+  CHECK(f.rows == kFont + 24 && f.ranges == reinterpret_cast<const FontRange*>(kFont + 18));  // zero copy
+  CHECK(f.ranges[0].first == 0x416 && f.ranges[0].count == 1 && f.ranges[0].glyph == 2);
+  CHECK(textWidth(f, "AB\xD0\x96") == 11);
+  char art[25];
+  artOf(f, "AB\xD0\x96", art);  // A, B from the base block, U+0416 from the range
+  CHECK(std::strcmp(art, "#.#..#..###." "###.#.#...#.") == 0);
+
+  Font g;  // two ranges: the second one is reached after the first does not match
+  CHECK(assetFont(kFont2, sizeof(kFont2), g) == Ok);
+  CHECK(g.nranges == 2 && g.ranges[1].first == 0x430 && g.ranges[1].count == 2 && g.ranges[1].glyph == 3);
+  artOf(g, "\xD0\xB1", art);
+  CHECK(std::strcmp(art, "##.........." ".#..........") == 0);
+
+  const Blob b(kFont, 30);
+  Blob m = b;
+  m.d[12] = 0;  // w == 0
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[12] = 9;
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[12] = 8;
+  CHECK(parseFont(m) == Ok);
+  m = b;
+  m.d[13] = 0;  // h == 0
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[13] = 4;  // 6 glyph bytes do not divide into 4-byte glyphs
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[13] = 3;  // 2 glyphs of 3 bytes: the range's glyph 2 is out of bounds
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[13] = 1;  // 6 glyphs of 1 byte
+  CHECK(parseFont(m) == Ok);
+  m = b;
+  m.d[17] = 0;  // no ranges: the table bytes become glyph bytes (6 glyphs)
+  CHECK(parseFont(m) == Ok);
+  m = b;
+  m.d[17] = 4;  // table longer than the payload
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[17] = 255;
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[15] = 3;  // base block as large as the glyph count
+  CHECK(parseFont(m) == Ok);
+  m = b;
+  m.d[15] = 4;  // more base codepoints than glyphs
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[15] = 0;  // empty base block: a range may start anywhere
+  CHECK(parseFont(m) == Ok);
+  m.d[18] = 0x41;
+  m.d[19] = 0;
+  CHECK(parseFont(m) == Ok);
+  m = b;
+  m.d[20] = 0;  // range count 0
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[22] = 3;  // glyph + count > glyphs
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[22] = 1;
+  CHECK(parseFont(m) == Ok);
+  m = b;
+  m.d[20] = 2;  // glyph 2 + 2 > 3
+  CHECK(parseFont(m) == Corrupt);
+  m = b;
+  m.d[18] = 0xFF;  // U+FFFF, count 1: the last codepoint
+  m.d[19] = 0xFF;
+  CHECK(parseFont(m) == Ok);
+  m.d[20] = 2;  // runs past U+FFFF (glyph 0 keeps the glyph bound satisfied)
+  m.d[22] = 0;
+  CHECK(parseFont(m) == Corrupt);
+  const uint8_t base_overlap[][3] = {  // range first lo, hi, count (base block is 0x41..0x42)
+      {0x41, 0, 1}, {0x42, 0, 1}, {0x40, 0, 2}, {0x43, 0, 1}, {0x40, 0, 1}, {0x41, 0, 2}};
+  const bool base_ok[] = {false, false, false, true, true, false};
+  for (int i = 0; i < 6; i++) {
+    m = b;
+    m.d[18] = base_overlap[i][0];
+    m.d[19] = base_overlap[i][1];
+    m.d[20] = base_overlap[i][2];
+    m.d[22] = 0;
+    CHECK(parseFont(m) == (base_ok[i] ? Ok : Corrupt));
+  }
+
+  const Blob b2(kFont2, 40);  // range 0 is 0x416..0x416, range 1 is 0x430..0x431
+  CHECK(parseFont(b2) == Ok);
+  m = b2;
+  for (int i = 0; i < 6; i++) std::swap(m.d[18 + i], m.d[24 + i]);  // not sorted
+  CHECK(parseFont(m) == Corrupt);
+  m = b2;
+  m.d[24] = 0x16;  // second range starts where the first does
+  m.d[25] = 0x04;
+  CHECK(parseFont(m) == Corrupt);
+  m.d[24] = 0x17;  // right behind the first range: touching is allowed
+  CHECK(parseFont(m) == Ok);
+  m = b2;
+  m.d[24] = 0x15;  // [0x415, 0x417) overlaps the first range
+  CHECK(parseFont(m) == Corrupt);
+
+  Blob lt(kFont, 17);  // payload shorter than the 6-byte sub-header
+  lt.setSize(5);
+  CHECK(parseFont(lt) == Corrupt);
+  alignas(4) uint8_t raw[64] = {};  // odd-aligned blob: the range table would be misaligned
+  std::memcpy(raw + 1, kFont, 30);
+  CHECK(parse(3, raw + 1, 30) == InvalidArg);
+  CHECK(parse(3, raw, 30) == Corrupt);
+
+  Font s;  // a rejected blob leaves out untouched, also when the violation is found last
+  s.rows = reinterpret_cast<const uint8_t*>(1);
+  s.w = 77;
+  s.nranges = 9;
+  m = b;
+  m.d[22] = 3;
+  CHECK(assetFont(m.d, m.n, s) == Corrupt);
+  CHECK(s.rows == reinterpret_cast<const uint8_t*>(1) && s.w == 77 && s.nranges == 9);
+  return 0;
+}
+
 static int testTilemapRejects() {
   Blob b(kTilemap, 22);
   Blob m = b;
@@ -238,6 +392,14 @@ static int testGenerated() {
   TilemapView m;
   CHECK(assetTilemap(kSampleTilemap, (uint32_t)kSampleTilemap_size, m) == Ok);
   CHECK(m.w == 3 && m.h == 2);
+  CHECK(kSampleFont_size == sizeof(kFont));
+  CHECK(std::memcmp(kSampleFont, kFont, sizeof(kFont)) == 0);
+  Font f;
+  CHECK(assetFont(kSampleFont, (uint32_t)kSampleFont_size, f) == Ok);
+  CHECK(f.w == 3 && f.h == 2 && f.first == 'A' && f.count == 2 && f.nranges == 1);
+  char art[25];
+  artOf(f, "AB\xD0\x96", art);
+  CHECK(std::strcmp(art, "#.#..#..###." "###.#.#...#.") == 0);
 #else
   std::printf("test_asset: PGE_HAVE_GEN not defined, cross-language (Python tool) part skipped\n");
 #endif
@@ -250,6 +412,7 @@ int main() {
   if (testSheetRejects()) return 1;
   if (testAtlas()) return 1;
   if (testTilemapRejects()) return 1;
+  if (testFont()) return 1;
   if (testGenerated()) return 1;
   std::printf("test_asset: all passed\n");
   return 0;

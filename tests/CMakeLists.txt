@@ -167,7 +167,7 @@ foreach(pge_hs_b fatfs littlefs)
 endforeach()
 
 add_executable(test_asset test_asset.cpp)
-target_link_libraries(test_asset PRIVATE pge_core)
+target_link_libraries(test_asset PRIVATE pge_core pge_platform_host_null)  # Canvas needs a display HAL
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test_asset PRIVATE -Wall -Wextra)
 endif()
@@ -185,10 +185,11 @@ endif()
 if(pge_have_pil)
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_sprites.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_font.h
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/pge_assets.py selftest --emit-dir ${CMAKE_CURRENT_BINARY_DIR}/gen
     DEPENDS ${CMAKE_SOURCE_DIR}/tools/pge_assets.py)
   add_custom_target(pge_asset_gen DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_sprites.h
-    ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h)
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_tilemap.h ${CMAKE_CURRENT_BINARY_DIR}/gen/sample_font.h)
   add_dependencies(test_asset pge_asset_gen)
   target_include_directories(test_asset PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen)
   target_compile_definitions(test_asset PRIVATE PGE_HAVE_GEN)
