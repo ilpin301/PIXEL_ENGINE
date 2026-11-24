@@ -33,6 +33,7 @@ class PlanetGame {
     uint32_t max_tick_us, max_band_us, max_flush_us, max_frame_us;
   };
   static constexpr int kTile = 8, kWorldPx = 1024, kCentre = 512, kBlob = 11, kChangeCap = 128 * 128 * 2;
+  static constexpr int kFgTiles = 7;  // fg tile ids 0..6; ids kFgTiles + t are the lit copies of tile t in the view
   // radius 52 leaves 12 tiles (96 px) of space above the rim at every cardinal point: headroom for jump / jetpack and an unclamped camera
   static constexpr pge::RoundSpec kSpec = {4, 52};
   // Core radius in tiles (kGenCore: solid, not breakable). The body centre stays about a core radius plus half the body
@@ -180,7 +181,6 @@ class PlanetGame {
       const int i = (face_ < 0 ? -tilt_i_ : tilt_i_) + kTiltMax, s = tilt_sheet_.w;
       c.sprite(tilt_sheet_, i * 2 + fr, r.x + r.w / 2 - (face_ < 0 ? s - tilt_ox_[i] : tilt_ox_[i]), r.y + r.h - tilt_oy_[i], fl);
     }
-    c.rect(cam_.toScreen(Rect{tx_ * kTile, ty_ * kTile, 2 * kTile, 2 * kTile}), rgb(255, 60, 60));
     if (turn_ > 0) {  // iris: the bars shrink from half the screen each to nothing
       const int h = PGE_LOGICAL_H / 2 * turn_ / kTurnTicks;
       c.fillRect(Rect{0, 0, PGE_LOGICAL_W, h}, 0);
@@ -189,7 +189,7 @@ class PlanetGame {
   }
 
   // The rotating camera: both layers through tilemapRotated about the view centre (always at the screen centre), the
-  // character upright at the screen position of its reference point (row kCharY), the aim zone as its rotated outline.
+  // character upright at the screen position of its reference point (row kCharY); the aim zone shows as lit tiles in the fg layer.
   void drawRotated(pge::Canvas& c) {
     using namespace pge;
     const int ax = view_x_ - win_x_ * kTile, ay = view_y_ - win_y_ * kTile;
@@ -198,10 +198,6 @@ class PlanetGame {
     c.tilemapRotated(TileLayer{vis_fg_, vis_n_, vis_n_, &fg_set_}, ax, ay, cx, cy, view_cos_, view_sin_);
     const Rect r = charScreenRect();
     c.sprite(charSheet(), walk_ ? (ticks_ >> 3) & 1 : 0, r.x, r.y, face_ < 0 ? FlipX : None);
-    int px[4], py[4];
-    for (int i = 0; i < 4; i++)
-      toViewScreen((tx_ + 2 * (i == 1 || i == 2)) * kTile, (ty_ + 2 * (i >= 2)) * kTile, px[i], py[i]);
-    for (int i = 0; i < 4; i++) c.line(px[i], py[i], px[(i + 1) & 3], py[(i + 1) & 3], rgb(255, 60, 60));
   }
 
   // A dial with an arrow through its centre: the bright tip (and "U") points to the planet's world-up as this view
@@ -379,6 +375,11 @@ class PlanetGame {
   const pge::SpriteSheet& tiltSheet() const { return tilt_sheet_; }  // frame (index + 4) * 2 + walk frame, square tiltSide(charH())
   int targetX() const { return tx_; }  // top-left tile of the 2 x 2 aim zone
   int targetY() const { return ty_; }
+  // The fg tile id the last tick put in the view window for world tile (tx, ty) (kFgTiles + id = lit); 0 outside the window.
+  uint8_t viewTile(int tx, int ty) const {
+    const int x = tx - win_x_, y = ty - win_y_;
+    return x >= 0 && x < vis_n_ && y >= 0 && y < vis_n_ ? vis_fg_[y * vis_n_ + x] : 0;
+  }
   const char* message() const { return msg_t_ > 0 ? kMsgs[msg_] : ""; }  // HUD message, "" when expired
 
  private:
@@ -392,7 +393,7 @@ class PlanetGame {
   static constexpr int kDig = 192;  // dig mode speed (0.75 px per tick) at full stick, in any direction
   // Tile window: 42 x 42 covers either 4-way orient; the rotating view needs the 200 px half diagonal of the screen on
   // every side of the view centre (52 tiles = 208 px, 8 px of window-origin slack leave at least 201).
-  static constexpr int kVisStd = 42, kVis = 52, kFgTiles = 7, kWallTiles = 3;
+  static constexpr int kVisStd = 42, kVis = 52, kWallTiles = 3;
   // Rotating view: a body jump is released at kRelease px per tick and the view centre's distance from the planet centre
   // eases by a third of the gap, at most kEaseMax px per tick (a fast fall shows the character sinking a little).
   static constexpr int kRelease = 2, kEaseMax = 3;
@@ -557,7 +558,7 @@ class PlanetGame {
     bot_orient_ = cam_.orient;
     updateTilt();
     follow(x + b.w / 2, y + b.h / 2, true);
-    aim(idle_);  // no stale target outline before the first tick; after follow: the rotating view's aim reads its vector
+    aim(idle_);  // no stale lit aim tiles before the first tick; after follow: the rotating view's aim reads its vector
     buildView();
   }
 
@@ -832,6 +833,7 @@ class PlanetGame {
   // Copies the tiles around the camera into small buffers for Canvas::tilemap (done in onTick, never in onRender).
   // cam_ may be negative: >> 3 floors, so the offset cam_ - win_ * kTile passed to tilemap stays in 0..7.
   // Rotating view: the window is centred on the view centre and is wide enough for every screen corner.
+  // The breakable tiles of the aim zone get the lit id (kFgTiles + id), so aim() must run before this in a tick.
   void buildView() {
     vis_n_ = rotate ? kVis : kVisStd;
     win_x_ = (rotate ? view_x_ - vis_n_ * kTile / 2 : cam_.x) >> 3;
@@ -843,6 +845,12 @@ class PlanetGame {
         vis_fg_[y * vis_n_ + x] = f < kFgTiles ? f : 0;
         vis_wall_[y * vis_n_ + x] = w < kWallTiles ? w : 0;
       }
+    for (int i = 0; i < 4; i++) {
+      const int tx = tx_ + (i & 1), ty = ty_ + (i >> 1), x = tx - win_x_, y = ty - win_y_;
+      if (x >= 0 && x < vis_n_ && y >= 0 && y < vis_n_ &&
+          (world_.props(world_.get(tx, ty, pge::Layer::Fg)).flags & pge::kTileBreakable))
+        vis_fg_[y * vis_n_ + x] += kFgTiles;
+    }
   }
 
   // Placeholder character, 16 x h, facing right: helmet, visor, suit, jetpack box on the back, legs, boots; 2 walk frames.
@@ -867,10 +875,16 @@ class PlanetGame {
 
   void makeArt() {
     using pge::rgb;
-    const pge::Color fp[] = {0, rgb(70, 190, 60), rgb(40, 130, 40), rgb(150, 100, 50), rgb(110, 70, 30),
-                             rgb(130, 130, 140), rgb(100, 100, 112), rgb(240, 200, 40), rgb(80, 230, 230),
-                             rgb(90, 20, 20), rgb(170, 45, 20), rgb(255, 150, 40)};  // 9..11: the core, dark red to glow
-    for (int i = 0; i < 12; i++) fg_pal_[i] = fp[i];
+    static constexpr uint8_t fp[12][3] = {{0, 0, 0},       {70, 190, 60},   {40, 130, 40},  {150, 100, 50},
+                                          {110, 70, 30},   {130, 130, 140}, {100, 100, 112}, {240, 200, 40},
+                                          {80, 230, 230},  {90, 20, 20},    {170, 45, 20},   {255, 150, 40}};
+    // 9..11: the core, dark red to glow. 12..23: the same colours 45 % of the way to white (entry 12, the lit copy of
+    // "transparent", is never drawn).
+    auto lit = [](int c) { return static_cast<uint8_t>(c + (255 - c) * 9 / 20); };
+    for (int i = 0; i < 12; i++) {
+      fg_pal_[i] = rgb(fp[i][0], fp[i][1], fp[i][2]);
+      fg_pal_[12 + i] = i ? rgb(lit(fp[i][0]), lit(fp[i][1]), lit(fp[i][2])) : 0;
+    }
     const pge::Color wp[] = {0, rgb(80, 55, 30), rgb(60, 40, 22), rgb(60, 60, 72), rgb(46, 46, 58)};
     for (int i = 0; i < 5; i++) wall_pal_[i] = wp[i];
     const pge::Color pp[] = {0, kHeadColor, rgb(120, 220, 255), rgb(225, 225, 235), rgb(90, 95, 105), rgb(40, 60, 170), kBootColor};
@@ -890,6 +904,12 @@ class PlanetGame {
         const int h = (x * 3 + y * 5) % 11;
         wall_px_[64 + o] = h ? 1 : 2;
         wall_px_[128 + o] = h < 2 ? 4 : 3;
+      }
+    // fg tile ids kFgTiles + t are the lit copies of tile t, used for the aim zone (palette entries 12..23, 0 stays transparent)
+    for (int t = 1; t < kFgTiles; t++)
+      for (int o = 0; o < 64; o++) {
+        const uint8_t p = fg_px_[t * 64 + o];
+        fg_px_[(kFgTiles + t) * 64 + o] = p ? static_cast<uint8_t>(p + 12) : 0;
       }
     drawChar(char24_px_, 24);
     drawChar(char32_px_, 32);
@@ -924,9 +944,9 @@ class PlanetGame {
   pge::EntityId player_ = pge::kNoEntity;
   pge::GravityDir gd_ = pge::GravityDir::Down;
   pge::Camera cam_{0, 0, PGE_LOGICAL_W, PGE_LOGICAL_H, kWorldPx, kWorldPx};
-  uint8_t fg_px_[kFgTiles * 64] = {}, wall_px_[kWallTiles * 64] = {};
+  uint8_t fg_px_[2 * kFgTiles * 64] = {}, wall_px_[kWallTiles * 64] = {};
   uint8_t char24_px_[2 * 16 * 24] = {}, char32_px_[2 * 16 * 32] = {};
-  pge::Color fg_pal_[12] = {}, wall_pal_[5] = {}, player_pal_[7] = {};
+  pge::Color fg_pal_[24] = {}, wall_pal_[5] = {}, player_pal_[7] = {};
   pge::Tileset fg_set_{fg_px_, fg_pal_, kTile, kTile, true};
   pge::Tileset wall_set_{wall_px_, wall_pal_, kTile, kTile, true};
   pge::SpriteSheet sheet24_{char24_px_, player_pal_, 16, 24, 2, true};

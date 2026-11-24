@@ -1,5 +1,5 @@
 // Planet tests (null host backend, no Engine::run): spawn on the rim, a full autoplay lap with both character sizes
-// (gravity order, camera orient, never inside rock), digging the 2 x 2 aim zone along gravity in all 4 quadrants and its place
+// (gravity order, camera orient, never inside rock), digging the 2 x 2 aim zone along gravity in all 4 quadrants (its tiles drawn lit) and its place
 // beside the body, the size toggle, the upright
 // character in all 4 camera orients, the tilted character (frames pre-rotated along the radial axis), the rotating view
 // (view vector, steady world, upright character a third from the screen top, snap on load), Up = jump / jetpack, dig mode (A held), the
@@ -161,6 +161,36 @@ static int testDig() {
   // Air and the world's edge are not breakable; the zone just dug is air, so digging it again does nothing.
   CHECK(!g_a.dig(PlanetGame::kCentre / 8, 0) && !g_a.dig(-1, -1));
   CHECK(!g_a.digZone() && !msgIs(g_a, "LOG FULL"));
+  return 0;
+}
+
+// Aiming down at the ground lights the breakable tiles of the 2 x 2 zone (the view tile id is the fg id + kFgTiles) and leaves
+// the other tiles as they are; B digs the zone, and then nothing of it stays lit.
+static int testAimLight() {
+  g_a.char_h = 32;
+  CHECK(create(g_a) == pge::Ok);
+  tick(g_a, 40);
+  CHECK(onGround(g_a));
+  g_a.onTick(stickAim(1));
+  const int zx = g_a.targetX(), zy = g_a.targetY();
+  int lit = 0, was_lit = 0;  // was_lit: bit i = zone tile i was breakable
+  for (int i = 0; i < 4; i++) {
+    const int tx = zx + (i & 1), ty = zy + (i >> 1);
+    const uint8_t f = g_a.world().get(tx, ty, pge::Layer::Fg);
+    const bool brk = (g_a.world().props(f).flags & pge::kTileBreakable) != 0;
+    CHECK(g_a.viewTile(tx, ty) == (brk ? f + PlanetGame::kFgTiles : f));
+    lit += brk;
+    was_lit |= brk << i;
+  }
+  CHECK(lit >= 1);
+  g_a.onTick(press(PGE_BTN_DOWN | PGE_BTN_B));  // Down aims at the same zone; B alone would aim in front
+  CHECK(g_a.targetX() == zx && g_a.targetY() == zy);
+  for (int i = 0; i < 4; i++) {
+    const int tx = zx + (i & 1), ty = zy + (i >> 1);
+    CHECK(g_a.viewTile(tx, ty) < PlanetGame::kFgTiles);
+    CHECK(!(was_lit >> i & 1) || (g_a.viewTile(tx, ty) == 0 && g_a.world().get(tx, ty, pge::Layer::Fg) == pge::kTileAir));
+  }
+  std::printf("aim light: %d of 4 zone tiles lit before the dig, none after\n", lit);
   return 0;
 }
 
@@ -1123,7 +1153,7 @@ static int testSaveLoad() {
   return 0;
 }
 
-// A new pose recomputes the aim at once (no stale outline before the first tick), and a failed load that wiped the change
+// A new pose recomputes the aim at once (no stale lit aim tiles before the first tick), and a failed load that wiped the change
 // log (a file that fails after the world was touched) puts rock back: a character standing in a dug hole must not stay in it.
 static int testPoseAimAndFailedLoad() {
   rmSave(kSave);
@@ -1190,7 +1220,7 @@ int main() {
   if (testSpawn()) return 1;
   if (testLap(24)) return 1;
   if (testLap(32)) return 1;
-  if (testDig() || testAimZone()) return 1;
+  if (testDig() || testAimZone() || testAimLight()) return 1;
   if (testToggle()) return 1;
   if (testUpright()) return 1;
   if (testTiltZero() || testTiltFrames() || testTiltLap(24) || testTiltLap(32) || testTiltLeft()) return 1;

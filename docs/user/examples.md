@@ -176,7 +176,7 @@ The host exe path for `empty`, `proto`, `gfxdemo` and `sandbox` follows the same
 - **Keys:**
   - Left and Right walk. Up jumps; held in the air it is the jetpack. On the F429 board the stick's up direction is Up, so it jumps and flies.
   - Hold Z (board: the first button, A) for dig mode: gravity is off and the character moves in any direction the stick points (analog, all directions on the board; the host arrows give 8 directions), at 0.75 px per tick, digging every breakable tile in its way; the unbreakable core still stops it. Release to walk again.
-  - X digs the aimed 2 x 2 tiles (every breakable tile of the zone, which sits just outside the body). Up and Down or WASD aim (none = the zone in front); Up also jumps, WASD aims without jumping. In `--rotate` the aim offset is turned with the view, so up and down are straight above and below the upright character on the screen.
+  - X digs the aimed 2 x 2 tiles (every breakable tile of the zone, which sits just outside the body). Up and Down or WASD aim (none = the zone in front); Up also jumps, WASD aims without jumping. The tiles of the aimed 2 x 2 zone that can be dug are drawn lighter (no outline). In `--rotate` the aim offset is turned with the view, so up and down are straight above and below the upright character on the screen.
   - A left click (host) or a touch (board) digs the 2 x 2 zone around the touched point, once per touch, at any distance (no reach limit yet). It is ignored during the 4-way iris turn.
   - Backspace (Select) switches the character between 24 and 32 px tall if there is room.
   - Enter saves. Esc quits.
